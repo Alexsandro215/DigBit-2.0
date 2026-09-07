@@ -1,0 +1,42 @@
+# ---- Visual Studio / .NET ----
+.vs/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.pdb
+*.cache
+*.vsidx
+*.exe
+*.dll
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.log
+*.VC.db
+*.opendb
+
+# ---- NuGet ----
+packages/
+*.nupkg
+*.snupkg
+!packages/build/
+
+# ---- Credenciales locales / configuracion sensible ----
+.env
+connections.config
+appsettings.Development.json
+appsettings.Local.json
+
+# ---- Editores ----
+.vscode/
+.idea/
+
+# ---- Sistema ----
+Thumbs.db
+Desktop.ini
