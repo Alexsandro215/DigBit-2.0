@@ -168,12 +168,29 @@ if (-not $Revertir -and $esKiosco) {
         throw "No apliques el kiosco sobre '$Cuenta': es la cuenta con la que estas ejecutando esto. Crea una cuenta estandar aparte."
     }
 
-    # Get-LocalUser vive en el modulo LocalAccounts, que no existe en PowerShell
-    # de 32 bits. Si DigBit.Instalador.exe corre como proceso de 32 bits, el
-    # powershell.exe que lanza es el de SysWOW64 y el cmdlet no esta. Sin este
-    # aviso el error que sale es "no se reconoce el termino", que no dice nada.
+    # Get-LocalUser vive en el modulo LocalAccounts, que PowerShell normalmente
+    # autocarga solo. En el PowerShell que abre el instalador no lo hizo, y la
+    # instalacion murio con "no se reconoce el termino Get-LocalUser", que no
+    # dice nada. El autocargado depende de PSModulePath; cargar el modulo por su
+    # ruta fija no depende de nada.
     if (-not (Get-Command Get-LocalUser -ErrorAction SilentlyContinue)) {
-        throw "Get-LocalUser no existe en esta sesion de PowerShell. Casi seguro es PowerShell de 32 bits: el modulo LocalAccounts solo esta en el de 64. Abre $env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe como administrador y repite."
+        $moduloCuentas = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.LocalAccounts'
+        if (Test-Path $moduloCuentas) {
+            Import-Module $moduloCuentas -ErrorAction SilentlyContinue
+        }
+    }
+    if (-not (Get-Command Get-LocalUser -ErrorAction SilentlyContinue)) {
+        throw @"
+No encuentro Get-LocalUser, que hace falta para crear la cuenta del alumno.
+Viene con Windows, en el modulo Microsoft.PowerShell.LocalAccounts, y no se ha
+podido cargar ni solo ni a mano.
+
+Ejecuta esto mismo desde un PowerShell de administrador abierto a mano:
+    $env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe
+
+Si hace falta depurarlo, PSModulePath aqui vale:
+$env:PSModulePath
+"@
     }
 
     $cuentaExistente = Get-LocalUser -Name $Cuenta -ErrorAction SilentlyContinue
