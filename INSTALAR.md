@@ -23,6 +23,23 @@ DigBit\bin\Release  La aplicación
 DigBit.Vigilante\bin\Release  El servicio que cierra la sesión a la hora
 ```
 
+## La forma facil: el instalador
+
+En la raiz del paquete hay un **`DigBit.Instalador.exe`**. Haz doble clic: pide
+permiso de administrador, eliges que clase de equipo es, **el laboratorio lo
+escoges de una lista que saca de la base** y le das a Instalar.
+
+Por debajo ejecuta exactamente los mismos guiones que se describen abajo, asi
+que lo que hace es identico. La ventaja es que no hay que teclear una linea
+larga sin equivocarse, y que el nombre del laboratorio no se puede escribir
+mal porque no se escribe.
+
+Lo que el instalador **no** hace, y sigue siendo tuyo: descongelar Deep Freeze
+antes y volver a congelar despues.
+
+El resto de esta guia es el camino por consola, que es el que hay que seguir
+si el instalador falla o si quieres saber que esta pasando por debajo.
+
 ## Antes de empezar
 
 **Abre PowerShell como administrador.** El título de la ventana tiene que
