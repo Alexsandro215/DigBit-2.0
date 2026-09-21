@@ -99,18 +99,40 @@ ReiniciarServicio
 Write-Host '   bind-address=0.0.0.0'
 
 # --- 2. Usuario para los equipos remotos ----------------------------------------
-Paso "2. Usuario '$Usuario' para los equipos remotos"
-# Solo permisos de datos: nada de crear usuarios ni tablas. root sigue atado a
-# localhost, asi que desde otra maquina no se puede administrar el servidor.
-$sql = @"
+# Este guion es anterior a db\07_usuarios_minimos.sql. Cuando se escribio, el
+# usuario 'digbit' con permisos de datos sobre la base era lo mas restringido
+# que habia. Ya no: 07 crea digbit_equipo, que solo puede insertar bitacoras y
+# tocar cinco columnas de usuarios, y digbit_admin para el equipo de gestion.
+# Los dos son '@%', asi que en cuanto el puerto esta abierto ya valen desde
+# fuera. Crear 'digbit' encima de eso anade un usuario capaz de borrar el
+# semestre entero, que es justo lo que 07 evita; asi que si ya existen, no se
+# crea nada y se imprimen los que hay.
+$equipoExiste = (& $mysql '-h' '127.0.0.1' '-P' $Puerto '-u' 'root' '-N' '-B' `
+    '-e' "SELECT COUNT(*) FROM mysql.user WHERE user='digbit_equipo' AND host='%'") -eq '1'
+$usarMinimos = $equipoExiste -and -not $PSBoundParameters.ContainsKey('Usuario')
+
+if ($usarMinimos) {
+    Paso '2. Usuarios para los equipos remotos'
+    Write-Host '   ya existen digbit_equipo y digbit_admin (db\07_usuarios_minimos.sql)'
+    Write-Host '   no se crea ninguno mas: son mas restringidos que el de este guion'
+    $Usuario = 'digbit_equipo'
+} else {
+    Paso "2. Usuario '$Usuario' para los equipos remotos"
+    if ($equipoExiste) {
+        Write-Warning "Ya existe digbit_equipo, que esta mas restringido. '$Usuario' podra BORRAR cualquier cosa de $BaseDatos."
+    }
+    # Solo permisos de datos: nada de crear usuarios ni tablas. root sigue atado a
+    # localhost, asi que desde otra maquina no se puede administrar el servidor.
+    $sql = @"
 CREATE USER IF NOT EXISTS '$Usuario'@'%' IDENTIFIED WITH mysql_native_password BY '$Contrasena';
 ALTER USER '$Usuario'@'%' IDENTIFIED WITH mysql_native_password BY '$Contrasena';
 GRANT SELECT, INSERT, UPDATE, DELETE ON $BaseDatos.* TO '$Usuario'@'%';
 FLUSH PRIVILEGES;
 "@
-$sql | & $mysql '-h' '127.0.0.1' '-P' $Puerto '-u' 'root'
-if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el usuario.' }
-Write-Host "   creado, con permisos solo sobre $BaseDatos"
+    $sql | & $mysql '-h' '127.0.0.1' '-P' $Puerto '-u' 'root'
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el usuario.' }
+    Write-Host "   creado, con permisos solo sobre $BaseDatos"
+}
 
 # --- 3. Cortafuegos --------------------------------------------------------------
 Paso "3. Abrir el puerto $Puerto en redes privadas"
@@ -131,6 +153,28 @@ Write-Host ''
 Write-Host 'Cadena de conexion para las OTRAS maquinas:' -ForegroundColor Green
 foreach ($ip in $ips) {
     Write-Host ("   Database=$BaseDatos;Server=$($ip.IPAddress);Port=$Puerto;User Id=$Usuario;Password=$Contrasena") -ForegroundColor Yellow
+}
+# Una sola IP es la buena, y cual depende de por donde venga cada equipo. Sin
+# esto hay que adivinar entre varias, y la de VirtualBox se parece bastante a
+# la de la red de verdad como para escoger mal.
+if ($ips.Count -gt 1) {
+    Write-Host ''
+    Write-Host 'Sale mas de una porque este equipo tiene varias redes. Usa:' -ForegroundColor Cyan
+    foreach ($ip in $ips) {
+        $pista = switch -Wildcard ($ip.InterfaceAlias) {
+            '*VirtualBox*' { 'solo para maquinas virtuales de este equipo' }
+            '*Hyper-V*'    { 'solo para maquinas virtuales de este equipo' }
+            '*Wi-Fi*'      { 'la red inalambrica; vale si los equipos van por wifi' }
+            default        { 'la red del edificio; esta es la de los equipos del laboratorio' }
+        }
+        if ($ip.IPAddress -like '192.168.56.*') { $pista = 'red interna de VirtualBox; solo para las virtuales de este equipo' }
+        Write-Host ("   {0,-16} {1}" -f $ip.IPAddress, $pista)
+    }
+}
+if ($usarMinimos) {
+    Write-Host ''
+    Write-Host 'Para el equipo del administrador, el mismo Server pero:' -ForegroundColor Green
+    Write-Host "   User Id=digbit_admin  y su contrasena" -ForegroundColor Yellow
 }
 Write-Host ''
 Write-Host 'Si esta maquina es una virtual con adaptador NAT y ninguna de esas IP'
