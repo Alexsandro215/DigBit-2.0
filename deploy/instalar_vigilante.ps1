@@ -19,12 +19,18 @@
 #Requires -RunAsAdministrator
 [CmdletBinding()]
 param(
-    [string]$Ruta = (Join-Path $PSScriptRoot '..\DigBit.Vigilante\bin\Release\DigBit.Vigilante.exe'),
+    [string]$Ruta,
     [switch]$Desinstalar
 )
 
 $ErrorActionPreference = 'Stop'
 $nombre = 'DigBitVigilante'
+
+# OJO: $PSScriptRoot llega VACIO dentro de los valores por defecto del bloque
+# param cuando el guion se lanza con "powershell -File <ruta>", que es como lo
+# llama el instalador. En el cuerpo si esta, asi que se resuelve aqui. Con & o
+# dot-source funcionaba de las dos formas, y por eso no se vio antes.
+if (-not $Ruta) { $Ruta = Join-Path $PSScriptRoot '..\DigBit.Vigilante\bin\Release\DigBit.Vigilante.exe' }
 
 # El modo seguro arranca con cmd.exe como shell (SafeBoot\AlternateShell) y sin
 # los servicios que no esten en su lista. Es decir: Mayus + Reiniciar deja un

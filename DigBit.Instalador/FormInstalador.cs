@@ -325,6 +325,10 @@ namespace DigBit.Instalador
                 args.Append(" -Modo ").Append(rbAdm.Checked ? "adm" : "maestro");
             }
 
+            // El guion sabe deducir su carpeta de origen, pero el instalador ya conoce
+            // la raiz del paquete: pasarla evita depender de $PSScriptRoot, que llega
+            // vacio dentro de los valores por defecto del param cuando se lanza -File.
+            args.Append(" -Origen ").Append(Guiones.Comillas(raiz));
             args.Append(" -CadenaConexion ").Append(Guiones.Comillas(CadenaConexion()));
 
             if (MessageBox.Show(

@@ -72,7 +72,7 @@ param(
 
     # Raiz del repositorio (o cualquier carpeta con DigBit\bin\Release y
     # DigBit.Vigilante\bin\Release dentro).
-    [string]$Origen = (Join-Path $PSScriptRoot '..'),
+    [string]$Origen,
 
     [string]$Destino = 'C:\DigBit',
 
@@ -124,6 +124,11 @@ if ($Cuenta -match '[\\/@"]') {
     throw "El nombre de cuenta '$Cuenta' tiene que ser una cuenta LOCAL, sin dominio."
 }
 
+# OJO: $PSScriptRoot llega VACIO dentro de los valores por defecto del bloque
+# param cuando el guion se lanza con "powershell -File <ruta>", que es como lo
+# llama el instalador. En el cuerpo si esta, asi que se resuelve aqui. Con & o
+# dot-source funcionaba de las dos formas, y por eso no se vio antes.
+if (-not $Origen) { $Origen = Join-Path $PSScriptRoot '..' }
 $Origen  = [IO.Path]::GetFullPath($Origen)
 $Destino = [IO.Path]::GetFullPath($Destino)
 if ($CarpetaDatos) { $CarpetaDatos = [IO.Path]::GetFullPath($CarpetaDatos) }

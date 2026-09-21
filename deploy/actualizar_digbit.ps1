@@ -21,7 +21,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Origen = (Join-Path $PSScriptRoot '..'),
+    [string]$Origen,
     [string]$Destino = 'C:\DigBit'
 )
 
@@ -37,6 +37,11 @@ function ExigirAdministrador([string]$porque) {
     }
 }
 
+# OJO: $PSScriptRoot llega VACIO dentro de los valores por defecto del bloque
+# param cuando el guion se lanza con "powershell -File <ruta>", que es como lo
+# llama el instalador. En el cuerpo si esta, asi que se resuelve aqui. Con & o
+# dot-source funcionaba de las dos formas, y por eso no se vio antes.
+if (-not $Origen) { $Origen = Join-Path $PSScriptRoot '..' }
 $Origen  = [IO.Path]::GetFullPath($Origen)
 $Destino = [IO.Path]::GetFullPath($Destino)
 

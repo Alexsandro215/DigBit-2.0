@@ -38,7 +38,7 @@ param(
     # en el repositorio. Solo hace falta si ADMIN001 todavia no existe.
     [string]$ContrasenaAdmin,
 
-    [string]$CarpetaRespaldo = (Join-Path $PSScriptRoot "..\respaldos"),
+    [string]$CarpetaRespaldo,
 
     # Carpeta donde estan mysql.exe y mysqldump.exe, si no estan en el PATH.
     [string]$BinMysql,
@@ -48,6 +48,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# OJO: $PSScriptRoot llega VACIO dentro de los valores por defecto del bloque
+# param cuando el guion se lanza con "powershell -File <ruta>", que es como lo
+# llama el instalador. En el cuerpo si esta, asi que se resuelve aqui. Con & o
+# dot-source funcionaba de las dos formas, y por eso no se vio antes.
+if (-not $CarpetaRespaldo) { $CarpetaRespaldo = Join-Path $PSScriptRoot "..\respaldos" }
 
 function Paso([string]$t) { Write-Host ""; Write-Host "== $t" -ForegroundColor Cyan }
 
