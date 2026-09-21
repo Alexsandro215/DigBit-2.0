@@ -339,7 +339,46 @@ namespace DigBit.Instalador
                 return;
             }
 
-            Correr(Guiones.Guion(raiz, "configurar_equipo.ps1"), args.ToString(), "Instalacion");
+            CorrerConArgumentos(Guiones.Guion(raiz, "configurar_equipo.ps1"), args.ToString(), "Instalacion");
+        }
+
+        /// <summary>
+        /// Lanza un guion con argumentos, metiendolos en un .ps1 temporal.
+        /// </summary>
+        /// <remarks>
+        /// Los argumentos se entrecomillan al estilo de PowerShell ('asi'), pero
+        /// "powershell -File" recibe la linea ya troceada por Windows, y Windows
+        /// no sabe nada de la comilla simple. El resultado era que
+        /// -Origen 'A:\DigBit-Paquete' llegaba con las comillas dentro del valor
+        /// y GetFullPath reventaba, y que la cadena de conexion se partia en el
+        /// espacio de "User Id" y su segunda mitad aterrizaba en el primer
+        /// parametro posicional del guion, que es -Cuenta.
+        ///
+        /// Dentro de un .ps1 quien parsea es PowerShell, que es de quien son esas
+        /// comillas. Es lo mismo que ya hacia PrepararServidor, que por eso
+        /// funcionaba mientras esta otra ruta fallaba.
+        /// </remarks>
+        private void CorrerConArgumentos(string guion, string argumentos, string que)
+        {
+            if (!File.Exists(guion))
+            {
+                MessageBox.Show("No encuentro " + guion, que, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            string temporal = Path.Combine(Path.GetTempPath(), "digbit_lanzar_" + Guid.NewGuid().ToString("N") + ".ps1");
+            StringBuilder envoltorio = new StringBuilder();
+            envoltorio.AppendLine("$ErrorActionPreference = 'Stop'");
+            envoltorio.AppendLine("& " + Comilla(guion) + argumentos);
+            File.WriteAllText(temporal, envoltorio.ToString(), new UTF8Encoding(false));
+            try
+            {
+                Correr(temporal, "", que);
+            }
+            finally
+            {
+                try { File.Delete(temporal); } catch (Exception) { }
+            }
         }
 
         private string Validar()

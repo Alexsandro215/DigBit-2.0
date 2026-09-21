@@ -127,10 +127,12 @@ PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 -- -----------------------------------------------------------------------------
 -- 4) Las cadenas de conexion que van en cada sitio
 -- -----------------------------------------------------------------------------
-SELECT 'Equipos del laboratorio (deploy\configurar_equipo.ps1 -CadenaConexion)' AS donde,
+-- Las barras van dobladas porque MySQL se come la barra invertida dentro de una
+-- cadena: 'deploy\configurar' salia impreso como 'deployconfigurar'.
+SELECT 'Equipos del laboratorio (deploy\\configurar_equipo.ps1 -CadenaConexion)' AS donde,
        CONCAT('Database=teschi_otru;Server=SERVIDOR;Port=3306;User Id=digbit_equipo;Password=', @clave_equipo) AS cadena
 UNION ALL
-SELECT 'Maquina del administrador (DigBit\connections.config)',
+SELECT 'Maquina del administrador (DigBit\\connections.config)',
        CONCAT('Database=teschi_otru;Server=SERVIDOR;Port=3306;User Id=digbit_admin;Password=', @clave_admin);
 
 -- -----------------------------------------------------------------------------
