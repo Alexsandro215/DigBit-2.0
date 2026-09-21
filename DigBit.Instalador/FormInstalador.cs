@@ -264,16 +264,58 @@ namespace DigBit.Instalador
             lblEstado.Text = "Consultando...";
             Application.DoEvents();
 
-            string consulta =
-                "$ErrorActionPreference='Stop';" +
-                "Add-Type -Path " + Guiones.Comillas(Path.Combine(raiz, "DigBit", "bin", "Release", "MySql.Data.dll")) + ";" +
-                "$c = New-Object MySql.Data.MySqlClient.MySqlConnection(" + Guiones.Comillas(CadenaConexion() + ";Connection Timeout=8") + ");" +
-                "$c.Open(); $m = $c.CreateCommand();" +
-                "$m.CommandText = 'SELECT nombre_laboratorio FROM laboratorios ORDER BY idlaboratorios';" +
-                "$r = $m.ExecuteReader(); while ($r.Read()) { $r.GetString(0) }; $r.Close(); $c.Close()";
+            // Add-Type -Path no vale aqui: ademas de cargar el DLL reflexiona
+            // sobre todos sus tipos, y eso obliga a resolver BouncyCastle,
+            // Protobuf, K4os y las demas dependencias de MySql.Data, que viven
+            // junto al DLL y no junto a powershell.exe. Salia
+            // "No se pueden cargar uno o varios tipos requeridos".
+            // LoadFrom con un AssemblyResolve que mire en esa carpeta si vale;
+            // es lo mismo que ya hace configurar_equipo.ps1.
+            string carpeta = Path.Combine(raiz, "DigBit", "bin", "Release");
+            StringBuilder ps = new StringBuilder();
+            ps.AppendLine("$ErrorActionPreference = 'Stop'");
+            ps.AppendLine("$global:CarpetaDigBit = " + Comilla(carpeta));
+            ps.AppendLine("$global:Resolviendo = @{}");
+            ps.AppendLine("[AppDomain]::CurrentDomain.add_AssemblyResolve([ResolveEventHandler] {");
+            ps.AppendLine("    param($remitente, $evento)");
+            ps.AppendLine("    $corto = ($evento.Name -split ',')[0]");
+            ps.AppendLine("    if ($global:Resolviendo.ContainsKey($corto)) { return $null }");
+            ps.AppendLine("    $global:Resolviendo[$corto] = $true");
+            ps.AppendLine("    try {");
+            ps.AppendLine("        $dll = Join-Path $global:CarpetaDigBit \"$corto.dll\"");
+            ps.AppendLine("        if (Test-Path $dll) { return [Reflection.Assembly]::LoadFrom($dll) }");
+            ps.AppendLine("        return $null");
+            ps.AppendLine("    } finally { $global:Resolviendo.Remove($corto) }");
+            ps.AppendLine("})");
+            ps.AppendLine("try {");
+            ps.AppendLine("    [void][Reflection.Assembly]::LoadFrom((Join-Path $global:CarpetaDigBit 'MySql.Data.dll'))");
+            ps.AppendLine("} catch [Reflection.ReflectionTypeLoadException] {");
+            // Sin esto el mensaje es "uno o varios tipos" y nunca dice cual falta.
+            ps.AppendLine("    $_.Exception.LoaderExceptions | ForEach-Object { Write-Host $_.Message }");
+            ps.AppendLine("    throw");
+            ps.AppendLine("}");
+            ps.AppendLine("$c = New-Object MySql.Data.MySqlClient.MySqlConnection(" + Comilla(CadenaConexion() + ";Connection Timeout=8") + ")");
+            ps.AppendLine("$c.Open()");
+            ps.AppendLine("$m = $c.CreateCommand()");
+            ps.AppendLine("$m.CommandText = 'SELECT nombre_laboratorio FROM laboratorios ORDER BY idlaboratorios'");
+            ps.AppendLine("$r = $m.ExecuteReader()");
+            ps.AppendLine("while ($r.Read()) { $r.GetString(0) }");
+            ps.AppendLine("$r.Close()");
+            ps.AppendLine("$c.Close()");
+
+            string temporal = Path.Combine(Path.GetTempPath(), "digbit_labs_" + Guid.NewGuid().ToString("N") + ".ps1");
+            File.WriteAllText(temporal, ps.ToString(), new UTF8Encoding(false));
 
             string salida, error;
-            int codigo = Ejecutar("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"" + consulta.Replace("\"", "\\\"") + "\"", out salida, out error);
+            int codigo;
+            try
+            {
+                codigo = Ejecutar("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -File \"" + temporal + "\"", out salida, out error);
+            }
+            finally
+            {
+                try { File.Delete(temporal); } catch (Exception) { }
+            }
 
             if (codigo != 0)
             {
