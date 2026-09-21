@@ -70,8 +70,19 @@ a `digbit_admin`; escribe en **Contrasena** la que acabas de crear para el.
 | Usuario | `digbit_admin` |
 | Contrasena | la del paso 1 |
 
-**Probar conexion** primero, **Instalar** despues. Deja DigBit en `C:\DigBit`
-sin bloquear la pantalla. Abrelo y entra con `ADMIN001` / `admin123`.
+**Probar conexion** primero, **Instalar** despues.
+
+En estos dos equipos, el del administrador y el del profesor, **no se instala
+nada en el sentido incomodo de la palabra**: no hay kiosco, ni cuenta nueva, ni
+servicio, ni inicio de sesion automatico. Son tres cosas y ya esta:
+
+1. la copia de DigBit en `C:\DigBit`,
+2. el `connections.config` apuntando al servidor,
+3. un **acceso directo "DigBit" en el escritorio**.
+
+Doble clic y entras con `ADMIN001` / `admin123`. La aplicacion es la misma que
+la de las maquinas de laboratorio; lo unico que cambia es que aqui no bloquea
+la pantalla. Todo el aparato del kiosco es exclusivo de la Parte B.
 
 **Da de alta los laboratorios aqui, antes de tocar ninguna maquina**: el
 instalador de las maquinas comprueba contra la base que existan.

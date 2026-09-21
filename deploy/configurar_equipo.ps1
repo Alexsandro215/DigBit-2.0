@@ -159,9 +159,21 @@ if (-not $Revertir -and -not $SoloMostrar) {
 # alumno se queda con un escritorio de administrador, en silencio, todo el
 # semestre. Tampoco puede ser la cuenta con la que se ejecuta esto, o te quedas
 # sin escritorio en mitad de la instalacion.
-if (-not $Revertir) {
+if (-not $Revertir -and $esKiosco) {
+    # Estas comprobaciones son de la cuenta del alumno, asi que solo valen para
+    # el kiosco. Antes corrian tambien en -Modo adm, donde $Cuenta esta vacio y
+    # no hay ninguna cuenta que mirar: no servian de nada y ademas hacian
+    # depender al equipo del administrador de un modulo que puede no estar.
     if ($Cuenta -eq $env:USERNAME) {
         throw "No apliques el kiosco sobre '$Cuenta': es la cuenta con la que estas ejecutando esto. Crea una cuenta estandar aparte."
+    }
+
+    # Get-LocalUser vive en el modulo LocalAccounts, que no existe en PowerShell
+    # de 32 bits. Si DigBit.Instalador.exe corre como proceso de 32 bits, el
+    # powershell.exe que lanza es el de SysWOW64 y el cmdlet no esta. Sin este
+    # aviso el error que sale es "no se reconoce el termino", que no dice nada.
+    if (-not (Get-Command Get-LocalUser -ErrorAction SilentlyContinue)) {
+        throw "Get-LocalUser no existe en esta sesion de PowerShell. Casi seguro es PowerShell de 32 bits: el modulo LocalAccounts solo esta en el de 64. Abre $env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe como administrador y repite."
     }
 
     $cuentaExistente = Get-LocalUser -Name $Cuenta -ErrorAction SilentlyContinue
@@ -179,8 +191,11 @@ if (-not $Revertir) {
         }
     }
 
-    # El equipo se queda sin base de datos si se copia la plantilla encima del
-    # connections.config bueno y no se indica uno nuevo.
+}
+
+# Esta si vale para los tres modos: el equipo se queda sin base de datos si se
+# copia la plantilla encima del connections.config bueno y no se indica uno.
+if (-not $Revertir) {
     if (-not $CadenaConexion -and -not (Test-Path (Join-Path $Destino 'connections.config'))) {
         throw "Este equipo no tiene connections.config y no indicaste -CadenaConexion: quedaria sin base de datos."
     }
@@ -550,6 +565,25 @@ Hacer "Dejar $Destino en solo lectura para los usuarios normales" {
 # vigilante. Un equipo de administrador o de profesor no necesita nada de eso;
 # es la MISMA aplicacion, solo que sin bloquear la pantalla.
 if (-not $esKiosco) {
+    # En un equipo de laboratorio DigBit ES el escritorio, asi que no hace falta
+    # nada para abrirlo. En el del administrador o el del profesor es un programa
+    # normal, y sin esto quedaba una carpeta en C: que hay que saber que existe.
+    # Que es lo unico que estos dos equipos necesitan: la copia, la conexion y
+    # algo donde hacer doble clic.
+    Paso 'Acceso directo en el escritorio'
+    $escritorio = [Environment]::GetFolderPath('CommonDesktopDirectory')
+    if (-not $escritorio) { $escritorio = [Environment]::GetFolderPath('Desktop') }
+    $enlace = Join-Path $escritorio 'DigBit.lnk'
+    Hacer "Crear $enlace" {
+        $shell = New-Object -ComObject WScript.Shell
+        $acceso = $shell.CreateShortcut($enlace)
+        $acceso.TargetPath = $exeDigBit
+        $acceso.WorkingDirectory = $Destino
+        $acceso.Description = "DigBit - bitacora de laboratorios ($Modo)"
+        $acceso.Save()
+        [Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+    }
+
     Paso 'Marca de instalacion'
     Hacer "Escribir $(Join-Path $Destino '.instalado')" {
         [IO.File]::WriteAllText(
@@ -560,6 +594,7 @@ if (-not $esKiosco) {
 
     Write-Host ''
     Write-Host "Equipo de $Modo preparado." -ForegroundColor Green
+    Write-Host "  - Abrelo con el acceso directo 'DigBit' del escritorio."
     Write-Host "  - DigBit esta en $Destino y se abre como cualquier programa."
     Write-Host '  - Sin kiosco: la pantalla no se bloquea y Windows funciona normal.'
     Write-Host '  - Sin cuenta de laboratorio, sin inicio de sesion automatico y sin vigilante.'
