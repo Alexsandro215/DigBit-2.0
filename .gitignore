@@ -48,3 +48,5 @@ tools/
 respaldos/
 DigBit-VM.zip
 DigBit-VM-actualizacion.zip
+# Paquete extraido para instalar en este equipo (se regenera del zip)
+/DigBit-Paquete/
