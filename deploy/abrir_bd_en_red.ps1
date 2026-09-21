@@ -142,6 +142,26 @@ New-NetFirewallRule -DisplayName $ReglaCortafuegos -Direction Inbound -Action Al
     -Protocol TCP -LocalPort $Puerto -Profile Private, Domain | Out-Null
 Write-Host '   regla creada (solo perfil privado y de dominio)'
 
+# La regla se limita a privado y dominio a proposito: abrir MySQL en una red
+# publica es otra cosa. Pero si Windows tiene clasificada como PUBLICA la red
+# por la que van a venir los equipos, la regla no se aplica a nada y el guion
+# terminaba en verde mientras nadie podia conectarse. El sintoma que sale al
+# otro lado es "Unable to connect to any of the specified MySQL hosts", que no
+# apunta al cortafuegos por ningun lado.
+$publicas = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq 'Public' })
+if ($publicas.Count -gt 0) {
+    Write-Host ''
+    Write-Warning 'La regla NO cubre las redes que tienes clasificadas como publicas:'
+    foreach ($p in $publicas) {
+        Write-Host ("     {0,-20} {1}" -f $p.InterfaceAlias, $p.Name) -ForegroundColor Yellow
+    }
+    Write-Host '   Si los equipos vienen por ahi, no van a conectar. Clasificala como privada:' -ForegroundColor Yellow
+    foreach ($p in $publicas) {
+        Write-Host ("     Set-NetConnectionProfile -InterfaceAlias '{0}' -NetworkCategory Private" -f $p.InterfaceAlias) -ForegroundColor Yellow
+    }
+    Write-Host '   (o Configuracion -> Red e Internet -> esa red -> Red privada)' -ForegroundColor Yellow
+}
+
 # --- Resumen ---------------------------------------------------------------------
 Paso 'Desde donde se puede llegar'
 $ips = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -ne '127.0.0.1' }
