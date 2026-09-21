@@ -381,7 +381,27 @@ namespace DigBit.Instalador
                 return;
             }
 
-            if (MessageBox.Show(
+            // preparar_bd.ps1 se niega a escribir encima de una base que ya
+            // existe, y hace bien: ahi estan las bitacoras. Pero sin esto el
+            // instalador soltaba su "throw" en crudo, que no dice que hacer, y
+            // no habia forma de pedir -Rehacer desde la ventana.
+            bool hayBase = Directory.Exists(@"C:\DigBitDB\data");
+            string rehacer = "";
+            if (hayBase)
+            {
+                if (MessageBox.Show(
+                        @"Ya hay una base de datos montada en C:\DigBitDB." + Environment.NewLine + Environment.NewLine +
+                        "Si lo que quieres es instalar la aplicacion en este equipo, cancela y marca" + Environment.NewLine +
+                        @"""Administrador"" aqui arriba: la base ya esta lista y no hay que volver a montarla." + Environment.NewLine + Environment.NewLine +
+                        "Continuar BORRA la base actual y la deja de cero. Se pierden las bitacoras," + Environment.NewLine +
+                        "los laboratorios y los horarios que ya hubiera dentro.",
+                        "Ya hay una base", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                {
+                    return;
+                }
+                rehacer = " -Rehacer";
+            }
+            else if (MessageBox.Show(
                     @"Se va a instalar MySQL en C:\DigBitDB como servicio, con el esquema y los datos de prueba," + Environment.NewLine +
                     "y se crearan los usuarios digbit_equipo y digbit_admin." + Environment.NewLine + Environment.NewLine +
                     "Esto se hace UNA SOLA VEZ, en el equipo que hara de servidor.",
@@ -393,7 +413,7 @@ namespace DigBit.Instalador
             string temporal = Path.Combine(Path.GetTempPath(), "digbit_preparar_" + Guid.NewGuid().ToString("N") + ".ps1");
             StringBuilder guion = new StringBuilder();
             guion.AppendLine("$ErrorActionPreference = 'Stop'");
-            guion.AppendLine("& " + Comilla(Path.Combine(raiz, "preparar_bd.ps1")) + @" -Destino 'C:\DigBitDB'");
+            guion.AppendLine("& " + Comilla(Path.Combine(raiz, "preparar_bd.ps1")) + @" -Destino 'C:\DigBitDB'" + rehacer);
             guion.AppendLine("if ($LASTEXITCODE -ne 0) { throw 'preparar_bd.ps1 fallo.' }");
             guion.AppendLine("Write-Host ''");
             guion.AppendLine("Write-Host '== Usuarios de MySQL con permisos minimos' -ForegroundColor Cyan");

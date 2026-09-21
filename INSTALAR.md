@@ -262,6 +262,9 @@ automático.
 
 ## Deshacerlo
 
+Para quitar sólo el kiosco y dejar el equipo utilizable, conservando los
+archivos, la cuenta, la carpeta de datos y la base:
+
 ```powershell
 .\deploy\configurar_equipo.ps1 -Cuenta laboratorio -Revertir
 .\preparar_bd.ps1 -Quitar
@@ -269,6 +272,22 @@ automático.
 
 Quita el kiosco, las directivas, el inicio automático y el servicio. **No** borra
 la carpeta de datos: ahí pueden quedar bitácoras sin enviar.
+
+Para dejar el equipo **como si DigBit nunca se hubiera instalado**, que es lo
+que hace falta antes de reinstalar desde cero:
+
+```powershell
+.\deploy\limpiar_equipo.ps1 -SoloMostrar        # primero mirar
+.\deploy\limpiar_equipo.ps1 -Todo               # y entonces hacerlo
+```
+
+Sin conmutadores no borra nada que tenga datos dentro: la base y la carpeta de
+datos se conservan y te dice al final que las dejó. `-Todo` incluye las dos, y
+`-Cuenta laboratorio -Todo` añade la cuenta del alumno y su perfil.
+
+> `-Todo` **borra la base entera**, con las bitácoras, los laboratorios y los
+> horarios. En el equipo servidor eso es el semestre. Respalda antes si hay algo
+> dentro que importe.
 
 ## Si algo falla
 
