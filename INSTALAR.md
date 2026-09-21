@@ -26,26 +26,81 @@ DigBit.Vigilante\bin\Release  El servicio que cierra la sesión a la hora
 ## La forma facil: el instalador
 
 En la raiz del paquete hay un **`DigBit.Instalador.exe`**. Haz doble clic: pide
-permiso de administrador y eliges que clase de equipo estas preparando.
+permiso de administrador y eliges arriba que clase de equipo estas preparando.
+Es la misma ventana para los cuatro casos; segun lo que marques se habilitan
+unas casillas u otras.
 
-**Empieza por "Servidor de base de datos"**, que es la primera opcion. Sin eso
-no hay base a la que conectar nada, y el resto de casillas te pediran datos que
-todavia no existen. Solo te pide dos contrasenas: la de los equipos del
-laboratorio y la del administrador, que crea en ese momento. Se hace **una sola
-vez** en todo el despliegue.
-
-Con la base ya montada, vuelves a la misma ventana y eliges **Administrador**.
-Los datos de conexion te los deja rellenos. Despues, en cada maquina de
-laboratorio, **el laboratorio se escoge de una lista que saca de la base**: no
-se teclea, asi que no se puede escribir mal.
-
-Por debajo ejecuta exactamente los mismos guiones que se describen abajo, asi
-que lo que hace es identico. La ventaja es que no hay que teclear una linea
-larga sin equivocarse, y que el nombre del laboratorio no se puede escribir
-mal porque no se escribe.
+Por debajo ejecuta exactamente los mismos guiones que se describen mas abajo,
+asi que lo que hace es identico. La ventaja es que no hay que teclear una linea
+larga sin equivocarse, y que el nombre del laboratorio no se puede escribir mal
+porque no se escribe: sale de una lista que lee de la base.
 
 Lo que el instalador **no** hace, y sigue siendo tuyo: descongelar Deep Freeze
 antes y volver a congelar despues.
+
+### Paso 1 — "Servidor de base de datos"
+
+**Va primero y se hace una sola vez en todo el despliegue**, en el equipo que
+va a guardar los datos. Sin esto no hay base a la que conectar nada.
+
+Se habilitan solo dos casillas, y las dos son contrasenas **que tu inventas
+ahora**. No son contrasenas que haya que adivinar: se crean en este momento.
+
+| Casilla | Que crea |
+|---|---|
+| Para los equipos (`digbit_equipo`) | el usuario de MySQL que llevaran las maquinas de laboratorio y los profesores |
+| Para el administrador (`digbit_admin`) | el usuario de MySQL del equipo que gestiona horarios |
+
+**Apunta las dos antes de pulsar Instalar.** Las vas a necesitar en cada equipo
+que configures despues, y no hay forma de recuperarlas: se guardan cifradas
+dentro de MySQL.
+
+Si ya hay una base montada te avisa y te deja cancelar. Continuar la borra
+entera.
+
+### Paso 2 — "Administrador"
+
+En el mismo equipo, o en el del encargado. Al marcarlo, el usuario cambia solo
+a `digbit_admin`; escribe en **Contrasena** la que acabas de crear para el.
+
+| Casilla | Que poner |
+|---|---|
+| Servidor | `127.0.0.1` si la base esta en este mismo equipo; si no, su IP |
+| Base | `teschi_otru` |
+| Usuario | `digbit_admin` |
+| Contrasena | la del paso 1 |
+
+**Probar conexion** primero, **Instalar** despues. Deja DigBit en `C:\DigBit`
+sin bloquear la pantalla. Abrelo y entra con `ADMIN001` / `admin123`.
+
+**Da de alta los laboratorios aqui, antes de tocar ninguna maquina**: el
+instalador de las maquinas comprueba contra la base que existan.
+
+### Paso 3 — "Maquina de laboratorio"
+
+Una vez por equipo. Descongelado si tiene Deep Freeze.
+
+| Casilla | Que poner |
+|---|---|
+| Servidor | la IP del equipo servidor |
+| Usuario | `digbit_equipo` (cambia solo) |
+| Contrasena | la de `digbit_equipo` del paso 1 |
+| Laboratorio | pulsa **Cargar** y escogelo de la lista |
+| Numero de maquina | el numero rotulado en el equipo |
+| Cuenta del laboratorio | `laboratorio` sirve |
+| Contrasena de esa cuenta | **la inventas tu**; es una cuenta de Windows nueva |
+| Carpeta de datos | con Deep Freeze, una ruta en el ThawSpace |
+| Autorizar la memoria USB | marcalo con la memoria de emergencia conectada |
+
+La misma contrasena de cuenta de Windows puede repetirse en las 30 maquinas: no
+protege nada frente al alumno, que ya entra con esa sesion.
+
+### Paso 4 — "Profesor"
+
+Como el de administrador pero con `digbit_equipo`: ve sus clases y sus
+bitacoras, no administra nada.
+
+---
 
 El resto de esta guia es el camino por consola, que es el que hay que seguir
 si el instalador falla o si quieres saber que esta pasando por debajo.
@@ -198,6 +253,39 @@ corrige nada sin repetir el ciclo entero.
 
 Igual que el del administrador, pero con el usuario restringido: un profesor ve
 sus clases y sus bitácoras, no administra nada.
+
+---
+
+# Todas las contrasenas, en una tabla
+
+Son cinco cosas distintas y es facil confundirlas, sobre todo porque tres se
+llaman "contrasena" en pantallas parecidas.
+
+| Que | Quien la pone | Donde hace falta despues | Donde acaba guardada |
+|---|---|---|---|
+| MySQL `digbit_equipo` | la inventas al preparar el servidor | cada maquina de laboratorio y cada equipo de profesor | `connections.config` de cada equipo, **en claro** |
+| MySQL `digbit_admin` | la inventas al preparar el servidor | el equipo del administrador | `connections.config` del ADM, **en claro** |
+| Cuenta de Windows del laboratorio | la inventas al instalar cada maquina | Windows, para el inicio automatico | el registro, **en claro** |
+| MySQL `root` | nadie: se queda vacia | solo desde el propio servidor | — |
+| Usuarios de DigBit (`ADMIN001`...) | vienen sembradas | entrar en la aplicacion | tabla `usuarios`, cifradas |
+
+Las dos primeras son las que hay que apuntar y guardar: sin ellas no se puede
+configurar ni un equipo mas. Las demas o se inventan sobre la marcha o no
+existen.
+
+**Las tres que dicen "en claro" son a proposito, y son el limite de este
+diseno.** El `connections.config` de una maquina de laboratorio lo puede leer
+el alumno, porque DigBit corre con su sesion de Windows; por eso esa maquina
+lleva `digbit_equipo`, que solo puede insertar bitacoras, y nunca
+`digbit_admin`. Lo peor que consigue quien lo lea es meter una bitacora falsa:
+no puede borrar el semestre ni cambiarse de grupo. La del inicio de sesion
+automatico esta en el registro en claro porque Windows lo guarda asi; protegerla
+de verdad necesita un secreto de LSA, que esta disenado pero sin escribir.
+
+`root` sin contrasena parece peor de lo que es: MySQL escucha solo en
+`127.0.0.1` salvo que ejecutes `abrir_bd_en_red.ps1`, asi que hace falta estar
+sentado en el servidor. Aun asi, ponle una si el servidor es una maquina a la
+que accede mas gente.
 
 ---
 
