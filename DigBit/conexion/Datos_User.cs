@@ -12,6 +12,18 @@ namespace DigBit.conexion
     {
             public static String snumeroIdentificador;
             public static String snumero;
+
+        /// <summary>
+        /// Tipo del usuario con la sesion abierta: 1 alumno, 2 profesor,
+        /// 3 administrador, 0 nadie. Lo fija el login y sirve para que una
+        /// pantalla no se abra a quien no le toca.
+        /// </summary>
+        public static int TipoUsuario { get; set; }
+
+        public static bool EsAdministrador
+        {
+            get { return TipoUsuario == 3; }
+        }
             public static String getUser()
             {
                 return snumeroIdentificador;
@@ -27,6 +39,25 @@ namespace DigBit.conexion
 
         public static void Setcodigo(string codigo) {
             snumero = codigo;
+        }
+
+        // Ventana del codigo con el que entro el alumno. La fase 3 la usa para
+        // saber cuando termina su sesion en el equipo.
+        public static VentanaCodigo VentanaActual { get; set; }
+
+        // Fase 4: si el codigo se resolvio SIN servidor, aqui queda lo necesario
+        // para encolar la bitacora (VentanaActual.IdCodigo es 0 en ese caso).
+        public static SesionLocal SesionSinConexion { get; set; }
+
+        // Al cerrar sesion: sin esto el siguiente usuario del mismo equipo hereda
+        // la matricula y el codigo del anterior (todo es estatico).
+        public static void Limpiar()
+        {
+            snumeroIdentificador = null;
+            snumero = null;
+            TipoUsuario = 0;
+            VentanaActual = null;
+            SesionSinConexion = null;
         }
     }
 }

@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using DigBit.conexion;
+using DigBit.Infraestructura;
 
 namespace DigBit
 {
@@ -15,6 +16,228 @@ namespace DigBit
         {
             InitializeComponent();
             mconexion = new Conexion();
+            Kiosco.Aplicar(this);
+            if (AppContexto.Actual != null)
+            {
+                AppContexto.Actual.Registrar(this);
+            }
+
+            // En kiosco no hay a donde salir ni sentido en minimizar.
+            imgSalir.Visible = !Kiosco.Activo;
+            imgMinimizar.Visible = !Kiosco.Activo;
+
+            // Darse de alta uno mismo no tiene sentido en un equipo del
+            // laboratorio: los alumnos los carga la escuela. Y tiene un coste
+            // real, porque obliga a que el usuario de MySQL de los equipos
+            // pueda INSERTAR en usuarios, y ese usuario y su contrasena estan
+            // en connections.config, que el alumno puede leer. Con ese permiso,
+            // desde cualquier cliente de MySQL se puede crear un usuario de
+            // tipo 3, que es administrador. Ver db/07_usuarios_minimos.sql.
+            btnRegistro.Visible = !Kiosco.Activo;
+
+            // Fase 4: franja de aviso cuando se trabaja con la copia local.
+            lblSinConexion = new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Bottom,
+                Height = 34,
+                BackColor = Color.FromArgb(255, 204, 128),
+                ForeColor = Color.Black,
+                Font = new Font("Century Gothic", 9F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Visible = false
+            };
+            Controls.Add(lblSinConexion);
+            lblSinConexion.BringToFront();
+            ActualizarAvisoSinConexion();
+
+            temporizadorAviso = new Timer { Interval = 5000 };
+            temporizadorAviso.Tick += (s, e) => ActualizarAvisoSinConexion();
+            temporizadorAviso.Start();
+
+            PrepararBotonApagar();
+        }
+
+        private Label lblSinConexion;
+        private Timer temporizadorAviso;
+        private Button btnApagar;
+
+        /// <summary>
+        /// En el kiosco no hay menu Inicio ni barra de tareas, asi que sin esto
+        /// la unica forma de apagar es Ctrl+Alt+Supr, que mucha gente no conoce,
+        /// o el boton fisico. Tiene que verse y decir lo que hace.
+        ///
+        /// Fuera del kiosco no se pone: ahi Windows ya tiene su propio menu, y
+        /// ademas ApagarEquipo() no apaga nada en un equipo de desarrollo.
+        /// </summary>
+        private void PrepararBotonApagar()
+        {
+            if (!Kiosco.Activo)
+            {
+                return;
+            }
+
+            btnApagar = new Button
+            {
+                Text = "Apagar el equipo",
+                Size = new Size(200, 46),
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Century Gothic", 10F, FontStyle.Bold),
+                BackColor = Color.FromArgb(63, 63, 70),
+                ForeColor = Color.White,
+                Cursor = Cursors.Hand,
+                // Sin TabStop: que no se apague el equipo por darle a Tab y Enter
+                // mientras se teclea la contrasena.
+                TabStop = false
+            };
+            btnApagar.FlatAppearance.BorderSize = 0;
+            btnApagar.Click += (s, e) => ConfirmarApagado();
+            Controls.Add(btnApagar);
+            btnApagar.BringToFront();
+
+            ColocarBotonApagar();
+            PrepararBotonEmergencia();
+            Resize += (s, e) => { ColocarBotonApagar(); ColocarBotonEmergencia(); };
+        }
+
+        private Button btnEmergencia;
+
+        /// <summary>
+        /// Salida para cuando DigBit no puede validar ningun codigo: sin
+        /// servidor y sin copia local utilizable, el laboratorio se queda
+        /// inservible. Pide clave y memoria USB (los dos), y abre el escritorio
+        /// sin bitacora.
+        ///
+        /// Se muestra siempre, no solo cuando falla el servidor: asi tambien
+        /// sirve si el problema es otro (un horario mal cargado, un codigo que
+        /// no llega). A cambio es una puerta permanente, y lo unico que la
+        /// cierra es que la memoria este en el llavero del encargado. Cada uso
+        /// queda registrado.
+        /// </summary>
+        private void PrepararBotonEmergencia()
+        {
+            if (!Kiosco.Activo)
+            {
+                return;
+            }
+
+            btnEmergencia = new Button
+            {
+                Text = "Acceso de emergencia",
+                Size = new Size(200, 32),
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Century Gothic", 8.5F),
+                BackColor = Color.FromArgb(94, 94, 102),
+                ForeColor = Color.White,
+                Cursor = Cursors.Hand,
+                TabStop = false
+            };
+            btnEmergencia.FlatAppearance.BorderSize = 0;
+            btnEmergencia.Click += (s, e) => AbrirEmergencia();
+            Controls.Add(btnEmergencia);
+            btnEmergencia.BringToFront();
+            ColocarBotonEmergencia();
+        }
+
+        /// <summary>Justo encima del de apagar, y mas discreto que el.</summary>
+        private void ColocarBotonEmergencia()
+        {
+            if (btnEmergencia == null || IsDisposed)
+            {
+                return;
+            }
+
+            const int margen = 24;
+            int franja = (lblSinConexion != null && lblSinConexion.Visible) ? lblSinConexion.Height : 0;
+            int altoApagar = (btnApagar != null) ? btnApagar.Height + 10 : 0;
+            btnEmergencia.Location = new Point(
+                ClientSize.Width - btnEmergencia.Width - margen,
+                ClientSize.Height - btnEmergencia.Height - margen - franja - altoApagar);
+        }
+
+        private void AbrirEmergencia()
+        {
+            if (!DialogoEmergencia.Pedir(this))
+            {
+                return;
+            }
+
+            this.Hide();
+            if (!SesionEquipo.LiberarEmergencia())
+            {
+                this.Show();
+                MessageBox.Show(
+                    "No se pudo abrir el escritorio." + Environment.NewLine + Environment.NewLine +
+                    "Avisa al encargado del laboratorio.",
+                    "Acceso de emergencia", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        /// <summary>Abajo a la derecha, por encima de la franja de sin conexion si la hay.</summary>
+        private void ColocarBotonApagar()
+        {
+            if (btnApagar == null || IsDisposed)
+            {
+                return;
+            }
+
+            const int margen = 24;
+            int franja = (lblSinConexion != null && lblSinConexion.Visible) ? lblSinConexion.Height : 0;
+            btnApagar.Location = new Point(
+                ClientSize.Width - btnApagar.Width - margen,
+                ClientSize.Height - btnApagar.Height - margen - franja);
+        }
+
+        private void ConfirmarApagado()
+        {
+            DialogResult respuesta = MessageBox.Show(
+                "¿Seguro que quieres apagar el equipo?" + Environment.NewLine + Environment.NewLine +
+                "Guarda antes tu trabajo.",
+                "Apagar el equipo",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+
+            if (respuesta != DialogResult.Yes)
+            {
+                return;
+            }
+
+            if (!SesionEquipo.ApagarEquipo())
+            {
+                MessageBox.Show(
+                    "No se pudo apagar el equipo." + Environment.NewLine + Environment.NewLine +
+                    "Avisa al encargado del laboratorio.",
+                    "Apagar el equipo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+        }
+
+        private void ActualizarAvisoSinConexion()
+        {
+            if (lblSinConexion == null || IsDisposed)
+            {
+                return;
+            }
+
+            string texto = SinConexion.TextoAviso();
+            lblSinConexion.Text = texto;
+            lblSinConexion.Visible = texto.Length > 0;
+            ColocarBotonApagar();
+            ColocarBotonEmergencia();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            if (temporizadorAviso != null)
+            {
+                temporizadorAviso.Stop();
+                temporizadorAviso.Dispose();
+                temporizadorAviso = null;
+            }
+
+            base.OnFormClosed(e);
         }
 
 
@@ -62,16 +285,19 @@ namespace DigBit
             }
         }
 
-        //Se configura la imagen "imgSalir" para que al momento de dar clic se cierre la ventana
+        //Se configura la imagen "imgSalir" para que al momento de dar clic se cierre la aplicacion (solo fuera del kiosco)
         private void imgSalir_Click(object sender, EventArgs e)
         {
-            Application.Exit();
+            AppContexto.Actual.Salir();
         }
 
         // Se configura la imagen "imgMinimizar" para que al momento de dar clic de minimice la ventana
         private void imgMinimizar_Click(object sender, EventArgs e)
         {
-            this.WindowState = FormWindowState.Minimized;
+            if (!Kiosco.Activo)
+            {
+                this.WindowState = FormWindowState.Minimized;
+            }
         }
 
         private void btnIniciarSesion_Click(object sender, EventArgs e)
@@ -97,17 +323,43 @@ namespace DigBit
                     return; // Salir del método si el usuario contiene caracteres especiales
                 }
 
-                // Verificar si el usuario es administrador y la contraseña es correcta
-                if (numeroIdentificadorIngresado == "ADMINISTRADOR" && contraseñaIngresada == "123")
+                // Fase 4: sin servidor, el alumno entra solo con su matricula contra la
+                // copia local; su bitacora quedara marcada como registrada sin conexion.
+                if (!SinConexion.Activo)
                 {
-                    // Iniciar sesión como administrador
-                    PrincipalAdministrador pa = new PrincipalAdministrador();
-                    pa.Show();
-                    this.Hide();
+                    try
+                    {
+                        Conexion.Probar();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("El servidor no responde al iniciar sesion", ex);
+                        if (!SinConexion.IntentarActivar(ex.Message))
+                        {
+                            MessageBox.Show("No hay conexión con el servidor y este equipo no tiene una copia del horario. Avisa al encargado del laboratorio.", "Sin conexión", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+
+                        ActualizarAvisoSinConexion();
+                    }
+                }
+
+                if (SinConexion.Activo)
+                {
+                    AlumnoCache alumno = SinConexion.Cache.BuscarAlumno(numeroIdentificadorIngresado);
+                    if (alumno == null)
+                    {
+                        MessageBox.Show("Sin conexión solo pueden entrar alumnos, y esa matrícula no está en la copia local de este equipo.", "Sin conexión", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    Log.Aviso("Alumno " + alumno.Matricula + " entra SIN CONEXION (matricula sin contrasena).");
+                    consultas.AbrirPestanaSegunTipoUsuario(1, alumno.Matricula);
                     return;
                 }
 
-                // Si no es administrador, intentar realizar el inicio de sesión
+                // El administrador es un usuario mas de la base (fk_tipo_usuario = 3)
+                // desde la fase 6; antes eran credenciales escritas aqui.
                 if (consultas.RealizarInicioSesion(numeroIdentificadorIngresado, contraseñaIngresada))
                 {
                     this.Hide();

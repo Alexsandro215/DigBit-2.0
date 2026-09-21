@@ -14,24 +14,53 @@ using DrawingFont = System.Drawing.Font;
 
 namespace DigBit
 {
+    /// <summary>
+    /// Bitacoras para el administrador, en dos niveles: arriba las SESIONES (una
+    /// clase en una fecha, que es la bitacora de esa hora) y abajo los alumnos
+    /// que registraron en la sesion elegida. Antes era una sola tabla con una
+    /// fila por alumno y los datos de la sesion repetidos en cada una.
+    /// </summary>
     public class GestionBitacorasAdministrador : Form
     {
+        // Fila de una bitacora que reporta algo: fondo suave. La celda con la
+        // falla concreta va en un tono fuerte, para localizarla de un vistazo.
+        private static readonly Color ColorConFalla = Color.FromArgb(255, 240, 214);
+        private static readonly Color ColorFallaCelda = Color.FromArgb(255, 176, 79);
+
         private readonly Consultas consultas;
         private readonly bool permitirEdicion;
-        private DataTable tablaBitacoras;
+        private DataTable tablaSesiones;
+        private DataTable tablaDetalle;
+        private int idSesionMostrada;
 
         private Label lblTitulo;
         private Label lblSubtitulo;
         private Label lblBusqueda;
         private Label lblDocente;
         private Label lblFecha;
+        private Label lblSesiones;
+        private Label lblDetalle;
         private Label lblCantidad;
+        private Panel pnlLeyenda;
+        private Label lblLeyenda;
+
+        /// <summary>Lo que hace falta de una sesion para nombrar y generar su PDF.</summary>
+        private sealed class SesionFila
+        {
+            public int IdSesion;
+            public string Codigo;
+            public string Profesor;
+            public string Fecha;
+            public string HoraEntrada;
+        }
+
         private TextBox txtBusqueda;
         private TextBox txtDocente;
         private DateTimePicker dtpFecha;
         private CheckBox chkFiltrarFecha;
         private CheckBox chkSeleccionarTodo;
-        private DataGridView dgvBitacoras;
+        private DataGridView dgvSesiones;
+        private DataGridView dgvDetalle;
         private Button btnAplicarFiltro;
         private Button btnLimpiarFiltro;
         private Button btnDescargarPdf;
@@ -41,19 +70,20 @@ namespace DigBit
 
         public GestionBitacorasAdministrador(bool permitirEdicion)
         {
-            consultas = new Consultas();
             this.permitirEdicion = permitirEdicion;
+            consultas = new Consultas();
 
             InicializarComponentes();
-            CargarBitacoras();
+            CargarSesiones();
         }
 
         private void InicializarComponentes()
         {
             BackColor = Color.White;
-            ClientSize = new Size(1280, 620);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            ClientSize = new Size(1280, 726);
+            MinimumSize = new Size(1100, 640);
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             Text = permitirEdicion ? "Modificar bitacoras" : "Ver bitacoras";
@@ -74,8 +104,8 @@ namespace DigBit
                 ForeColor = Color.FromArgb(50, 50, 50),
                 Location = new Point(30, 55),
                 Text = permitirEdicion
-                    ? "Selecciona un registro de la tabla para editarlo."
-                    : "Consulta todos los registros de bitacora en formato tabla."
+                    ? "Elige una sesion arriba y, abajo, el alumno cuyo registro quieres editar."
+                    : "Cada sesion es la bitacora de una clase en una fecha. Elige una para ver quien registro."
             };
 
             lblBusqueda = new Label
@@ -139,59 +169,105 @@ namespace DigBit
             };
 
             btnAplicarFiltro = CrearBoton("Aplicar filtro", new Point(980, 112), new Size(120, 38));
+            btnAplicarFiltro.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnAplicarFiltro.Click += btnAplicarFiltro_Click;
 
             btnLimpiarFiltro = CrearBoton("Limpiar", new Point(1115, 112), new Size(120, 38));
+            btnLimpiarFiltro.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnLimpiarFiltro.Click += btnLimpiarFiltro_Click;
+
+            // --- Nivel 1: sesiones ------------------------------------------
+            lblSesiones = new Label
+            {
+                AutoSize = true,
+                Font = new DrawingFont("Century Gothic", 10.5F, FontStyle.Bold),
+                ForeColor = Color.DarkGreen,
+                Location = new Point(30, 160),
+                Text = "Sesiones"
+            };
+
+            dgvSesiones = CrearTabla(new Point(33, 184), new Size(1210, 236));
+            dgvSesiones.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            dgvSesiones.MultiSelect = true;
+            // Los dos eventos: al pulsar una fila, SelectionChanged puede llegar
+            // antes de que CurrentRow apunte a la nueva. CargarDetalle se protege
+            // de la repeticion comparando con la sesion que ya esta mostrada.
+            dgvSesiones.SelectionChanged += (s, e) => CargarDetalle();
+            dgvSesiones.CurrentCellChanged += (s, e) => CargarDetalle();
+            dgvSesiones.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) DescargarSeleccionado(); };
+            dgvSesiones.CellFormatting += dgvSesiones_CellFormatting;
+
+            // --- Nivel 2: alumnos de la sesion -------------------------------
+            lblDetalle = new Label
+            {
+                AutoSize = true,
+                Font = new DrawingFont("Century Gothic", 10.5F, FontStyle.Bold),
+                ForeColor = Color.DarkGreen,
+                Location = new Point(30, 430),
+                Text = "Alumnos registrados"
+            };
+
+            dgvDetalle = CrearTabla(new Point(33, 454), new Size(1210, 186));
+            dgvDetalle.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            dgvDetalle.MultiSelect = false;
+            dgvDetalle.CellDoubleClick += dgvDetalle_CellDoubleClick;
+            dgvDetalle.CellFormatting += dgvDetalle_CellFormatting;
 
             chkSeleccionarTodo = new CheckBox
             {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
                 AutoSize = true,
                 Font = new DrawingFont("Century Gothic", 9.75F, FontStyle.Bold),
                 ForeColor = Color.DarkGreen,
-                Location = new Point(33, 545),
-                Text = "Seleccionar todo lo filtrado"
+                Location = new Point(33, 652),
+                Text = "Seleccionar todas las sesiones filtradas"
             };
             chkSeleccionarTodo.CheckedChanged += chkSeleccionarTodo_CheckedChanged;
 
-            dgvBitacoras = new DataGridView
-            {
-                Location = new Point(33, 170),
-                Size = new Size(1210, 360),
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                MultiSelect = true,
-                ReadOnly = true,
-                RowHeadersVisible = false,
-                ScrollBars = ScrollBars.Both,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect
-            };
-            dgvBitacoras.CellDoubleClick += dgvBitacoras_CellDoubleClick;
-
             lblCantidad = new Label
             {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
                 AutoSize = true,
                 Font = new DrawingFont("Century Gothic", 9.75F, FontStyle.Bold),
                 ForeColor = Color.DarkGreen,
-                Location = new Point(30, 550),
-                Text = "Registros encontrados: 0"
+                Location = new Point(30, 678),
+                Text = "Sesiones encontradas: 0"
             };
 
-            btnDescargarPdf = CrearBoton("Descargar PDF", new Point(650, 545), new Size(140, 42));
+            pnlLeyenda = new Panel
+            {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+                BackColor = ColorFallaCelda,
+                BorderStyle = BorderStyle.FixedSingle,
+                Location = new Point(33, 703),
+                Size = new Size(14, 14)
+            };
+
+            lblLeyenda = new Label
+            {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+                AutoSize = true,
+                Font = new DrawingFont("Century Gothic", 8.25F),
+                ForeColor = Color.FromArgb(50, 50, 50),
+                Location = new Point(52, 702),
+                Text = "Naranja intenso: la falla reportada. Naranja claro: el resto de esa bitacora."
+            };
+
+            btnDescargarPdf = CrearBoton("Descargar PDF", new Point(650, 651), new Size(140, 42));
+            btnDescargarPdf.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             btnDescargarPdf.Click += btnDescargarPdf_Click;
 
-            btnDescargarLote = CrearBoton("Descargar lote", new Point(805, 545), new Size(140, 42));
+            btnDescargarLote = CrearBoton("Descargar lote", new Point(805, 651), new Size(140, 42));
+            btnDescargarLote.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             btnDescargarLote.Click += btnDescargarLote_Click;
 
-            btnEditarSeleccion = CrearBoton("Editar seleccion", new Point(960, 545), new Size(140, 42));
+            btnEditarSeleccion = CrearBoton("Editar alumno", new Point(960, 651), new Size(140, 42));
+            btnEditarSeleccion.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             btnEditarSeleccion.Click += btnEditarSeleccion_Click;
             btnEditarSeleccion.Visible = permitirEdicion;
 
-            btnCerrar = CrearBoton("Cerrar", new Point(1115, 545), new Size(128, 42));
+            btnCerrar = CrearBoton("Cerrar", new Point(1115, 651), new Size(128, 42));
+            btnCerrar.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             btnCerrar.Click += btnCerrar_Click;
 
             Controls.Add(lblTitulo);
@@ -205,13 +281,37 @@ namespace DigBit
             Controls.Add(dtpFecha);
             Controls.Add(btnAplicarFiltro);
             Controls.Add(btnLimpiarFiltro);
+            Controls.Add(lblSesiones);
+            Controls.Add(dgvSesiones);
+            Controls.Add(lblDetalle);
+            Controls.Add(dgvDetalle);
             Controls.Add(chkSeleccionarTodo);
-            Controls.Add(dgvBitacoras);
             Controls.Add(lblCantidad);
+            Controls.Add(pnlLeyenda);
+            Controls.Add(lblLeyenda);
             Controls.Add(btnDescargarPdf);
             Controls.Add(btnDescargarLote);
             Controls.Add(btnEditarSeleccion);
             Controls.Add(btnCerrar);
+        }
+
+        private DataGridView CrearTabla(Point posicion, Size tamaño)
+        {
+            return new DataGridView
+            {
+                Location = posicion,
+                Size = tamaño,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                ReadOnly = true,
+                RowHeadersVisible = false,
+                ScrollBars = ScrollBars.Both,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+            };
         }
 
         private Button CrearBoton(string texto, Point posicion, Size tamaño)
@@ -232,56 +332,81 @@ namespace DigBit
             return boton;
         }
 
-        private void CargarBitacoras()
+        // =====================================================================
+        // Sesiones
+        // =====================================================================
+
+        private void CargarSesiones()
         {
-            tablaBitacoras = consultas.ObtenerBitacorasAdministrador();
-            dgvBitacoras.DataSource = tablaBitacoras;
-            ConfigurarColumnas();
+            try
+            {
+                tablaSesiones = consultas.ObtenerSesionesAdministrador();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("No se pudieron leer las sesiones: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                tablaSesiones = new DataTable();
+            }
+
+            dgvSesiones.DataSource = tablaSesiones;
+            ConfigurarColumnasSesiones();
             ActualizarContador();
             AplicarSeleccionAutomatica();
+            CargarDetalle();
         }
 
-        private void ConfigurarColumnas()
+        private void ConfigurarColumnasSesiones()
         {
-            if (dgvBitacoras.Columns.Count == 0)
+            if (dgvSesiones.Columns.Count == 0)
             {
                 return;
             }
 
-            dgvBitacoras.Columns["codigo"].HeaderText = "Codigo";
-            dgvBitacoras.Columns["fecha_generacion"].HeaderText = "Fecha";
-            dgvBitacoras.Columns["numero_empleado"].HeaderText = "No. empleado";
-            dgvBitacoras.Columns["profesor"].HeaderText = "Profesor";
-            dgvBitacoras.Columns["matricula_alumno"].HeaderText = "Matricula";
-            dgvBitacoras.Columns["alumno"].HeaderText = "Alumno";
-            dgvBitacoras.Columns["numero_computadora"].HeaderText = "Computadora";
-            dgvBitacoras.Columns["falla_red"].HeaderText = "Falla red";
-            dgvBitacoras.Columns["comentarios_red"].HeaderText = "Comentario red";
-            dgvBitacoras.Columns["falla_hardware"].HeaderText = "Falla hardware";
-            dgvBitacoras.Columns["comentarios_hardware"].HeaderText = "Comentario hardware";
-            dgvBitacoras.Columns["falla_software"].HeaderText = "Falla software";
-            dgvBitacoras.Columns["comentarios_software"].HeaderText = "Comentario software";
-            dgvBitacoras.Columns["hora_entrada"].HeaderText = "Entrada";
-            dgvBitacoras.Columns["hora_salida"].HeaderText = "Salida";
-            dgvBitacoras.Columns["grupo"].HeaderText = "Grupo";
-            dgvBitacoras.Columns["materia"].HeaderText = "Materia";
-            dgvBitacoras.Columns["laboratorio"].HeaderText = "Laboratorio";
+            dgvSesiones.Columns["idcodigos_accesos"].Visible = false;
+            dgvSesiones.Columns["fecha"].HeaderText = "Fecha";
+            dgvSesiones.Columns["hora_entrada"].HeaderText = "Entrada";
+            dgvSesiones.Columns["hora_salida"].HeaderText = "Salida";
+            dgvSesiones.Columns["codigo"].HeaderText = "Codigo";
+            dgvSesiones.Columns["materia"].HeaderText = "Materia";
+            dgvSesiones.Columns["grupo"].HeaderText = "Grupo";
+            dgvSesiones.Columns["numero_empleado"].HeaderText = "No. empleado";
+            dgvSesiones.Columns["profesor"].HeaderText = "Profesor";
+            dgvSesiones.Columns["laboratorio"].HeaderText = "Laboratorio";
+            dgvSesiones.Columns["alumnos"].HeaderText = "Alumnos";
+            dgvSesiones.Columns["con_fallas"].HeaderText = "Con fallas";
+            dgvSesiones.Columns["sin_conexion"].HeaderText = "Sin conexion";
 
-            dgvBitacoras.Columns["fk_codigo_accesos"].Visible = false;
-            dgvBitacoras.Columns["fk_usuario"].Visible = false;
+            dgvSesiones.Columns["materia"].FillWeight = 22;
+            dgvSesiones.Columns["profesor"].FillWeight = 22;
+            dgvSesiones.Columns["laboratorio"].FillWeight = 18;
 
-            dgvBitacoras.Columns["profesor"].FillWeight = 22;
-            dgvBitacoras.Columns["alumno"].FillWeight = 22;
-            dgvBitacoras.Columns["comentarios_red"].FillWeight = 20;
-            dgvBitacoras.Columns["comentarios_hardware"].FillWeight = 20;
-            dgvBitacoras.Columns["comentarios_software"].FillWeight = 20;
-            dgvBitacoras.Columns["materia"].FillWeight = 18;
-            dgvBitacoras.Columns["laboratorio"].FillWeight = 16;
+            foreach (string columna in new[] { "alumnos", "con_fallas", "sin_conexion" })
+            {
+                dgvSesiones.Columns[columna].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            }
+        }
+
+        /// <summary>La cuenta de bitacoras con falla se marca en naranja cuando no es cero.</summary>
+        private void dgvSesiones_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || dgvSesiones.Columns[e.ColumnIndex].Name != "con_fallas")
+            {
+                return;
+            }
+
+            int conFallas = 0;
+            if (e.Value != null && e.Value != DBNull.Value)
+            {
+                int.TryParse(e.Value.ToString(), out conFallas);
+            }
+
+            e.CellStyle.BackColor = conFallas > 0 ? ColorFallaCelda : Color.Empty;
+            e.CellStyle.SelectionBackColor = conFallas > 0 ? ControlPaint.Dark(ColorFallaCelda, 0.12f) : dgvSesiones.DefaultCellStyle.SelectionBackColor;
         }
 
         private void AplicarFiltros()
         {
-            if (tablaBitacoras == null)
+            if (tablaSesiones == null)
             {
                 return;
             }
@@ -289,7 +414,7 @@ namespace DigBit
             List<string> filtros = new List<string>();
             if (chkFiltrarFecha.Checked)
             {
-                filtros.Add($"fecha_generacion LIKE '{dtpFecha.Value:yyyy-MM-dd}%'");
+                filtros.Add($"fecha = '{dtpFecha.Value:yyyy-MM-dd}'");
             }
 
             string textoDocente = txtDocente.Text.Trim().Replace("'", "''");
@@ -305,30 +430,34 @@ namespace DigBit
             {
                 filtros.Add(
                     $"codigo LIKE '%{textoBusqueda}%' OR " +
-                    $"fecha_generacion LIKE '%{textoBusqueda}%' OR " +
+                    $"fecha LIKE '%{textoBusqueda}%' OR " +
                     $"numero_empleado LIKE '%{textoBusqueda}%' OR " +
                     $"profesor LIKE '%{textoBusqueda}%' OR " +
-                    $"matricula_alumno LIKE '%{textoBusqueda}%' OR " +
-                    $"alumno LIKE '%{textoBusqueda}%' OR " +
-                    $"numero_computadora LIKE '%{textoBusqueda}%' OR " +
                     $"grupo LIKE '%{textoBusqueda}%' OR " +
                     $"materia LIKE '%{textoBusqueda}%' OR " +
                     $"laboratorio LIKE '%{textoBusqueda}%'");
             }
 
-            tablaBitacoras.DefaultView.RowFilter = filtros.Count > 0
+            tablaSesiones.DefaultView.RowFilter = filtros.Count > 0
                 ? string.Join(" AND ", filtros.Select(filtro => $"({filtro})"))
                 : string.Empty;
 
-            dgvBitacoras.DataSource = tablaBitacoras.DefaultView;
-            ConfigurarColumnas();
+            dgvSesiones.DataSource = tablaSesiones.DefaultView;
+            ConfigurarColumnasSesiones();
             ActualizarContador();
             AplicarSeleccionAutomatica();
+            CargarDetalle();
         }
 
         private void ActualizarContador()
         {
-            lblCantidad.Text = $"Registros encontrados: {dgvBitacoras.Rows.Count}";
+            int alumnos = 0;
+            foreach (DataGridViewRow fila in dgvSesiones.Rows)
+            {
+                alumnos += LeerEntero(fila, "alumnos");
+            }
+
+            lblCantidad.Text = $"Sesiones encontradas: {dgvSesiones.Rows.Count} · {alumnos} bitacora(s) de alumnos en total";
         }
 
         private void AplicarSeleccionAutomatica()
@@ -341,9 +470,9 @@ namespace DigBit
 
         private void SeleccionarTodasLasFilasVisibles()
         {
-            dgvBitacoras.ClearSelection();
+            dgvSesiones.ClearSelection();
 
-            foreach (DataGridViewRow fila in dgvBitacoras.Rows)
+            foreach (DataGridViewRow fila in dgvSesiones.Rows)
             {
                 if (fila.Visible)
                 {
@@ -352,54 +481,207 @@ namespace DigBit
             }
         }
 
-        private DataGridViewRow ObtenerFilaSeleccionada()
+        // =====================================================================
+        // Detalle: alumnos de la sesion elegida
+        // =====================================================================
+
+        private void CargarDetalle()
         {
-            if (dgvBitacoras.CurrentRow == null)
+            int idSesion = ObtenerIdSesion(dgvSesiones.CurrentRow);
+            if (idSesion == idSesionMostrada)
             {
-                MessageBox.Show("Selecciona una bitacora de la tabla.", "Seleccion requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return null;
+                return;
             }
 
-            return dgvBitacoras.CurrentRow;
+            idSesionMostrada = idSesion;
+            if (idSesion == 0)
+            {
+                tablaDetalle = null;
+                dgvDetalle.DataSource = null;
+                lblDetalle.Text = "Alumnos registrados";
+                return;
+            }
+
+            try
+            {
+                tablaDetalle = consultas.consultaRegistroSesion(idSesion);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("No se pudieron leer los alumnos de la sesion: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                tablaDetalle = null;
+            }
+
+            dgvDetalle.DataSource = tablaDetalle;
+            ConfigurarColumnasDetalle();
+
+            DataGridViewRow fila = dgvSesiones.CurrentRow;
+            string descripcion = fila == null
+                ? ""
+                : " de " + LeerTexto(fila, "codigo") + " - " + LeerTexto(fila, "materia") + " - " + LeerTexto(fila, "grupo")
+                  + ", " + LeerTexto(fila, "fecha") + " " + LeerTexto(fila, "hora_entrada") + " a " + LeerTexto(fila, "hora_salida");
+            lblDetalle.Text = "Alumnos registrados" + descripcion + " (" + (tablaDetalle == null ? 0 : tablaDetalle.Rows.Count) + ")";
         }
+
+        private void ConfigurarColumnasDetalle()
+        {
+            if (dgvDetalle.Columns.Count == 0)
+            {
+                return;
+            }
+
+            foreach (string oculta in new[] { "fk_codigo_accesos", "fk_usuario", "nombre", "apellido_paterno", "apellido_materno", "con_falla", "sin_conexion" })
+            {
+                if (dgvDetalle.Columns.Contains(oculta))
+                {
+                    dgvDetalle.Columns[oculta].Visible = false;
+                }
+            }
+
+            dgvDetalle.Columns["numero_identificador"].HeaderText = "Matricula";
+            dgvDetalle.Columns["nombre_completo"].HeaderText = "Alumno";
+            dgvDetalle.Columns["numero_computadora"].HeaderText = "Computadora";
+            dgvDetalle.Columns["falla_red"].HeaderText = "Falla red";
+            dgvDetalle.Columns["comentarios_red"].HeaderText = "Comentario red";
+            dgvDetalle.Columns["falla_hardware"].HeaderText = "Falla hardware";
+            dgvDetalle.Columns["comentarios_hardware"].HeaderText = "Comentario hardware";
+            dgvDetalle.Columns["falla_software"].HeaderText = "Falla software";
+            dgvDetalle.Columns["comentarios_software"].HeaderText = "Comentario software";
+
+            dgvDetalle.Columns["nombre_completo"].DisplayIndex = 0;
+            dgvDetalle.Columns["nombre_completo"].FillWeight = 24;
+            dgvDetalle.Columns["comentarios_red"].FillWeight = 20;
+            dgvDetalle.Columns["comentarios_hardware"].FillWeight = 20;
+            dgvDetalle.Columns["comentarios_software"].FillWeight = 20;
+        }
+
+        /// <summary>
+        /// La fila de una bitacora con reportes va en tono suave y la celda que
+        /// contiene la falla, en tono fuerte: asi se localiza sin leer toda la
+        /// fila. Se decide en cada pintado, por si la tabla se recarga o reordena.
+        /// </summary>
+        private void dgvDetalle_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0)
+            {
+                return;
+            }
+
+            DataRowView vista = dgvDetalle.Rows[e.RowIndex].DataBoundItem as DataRowView;
+            if (vista == null || !Consultas.ConFalla(vista.Row))
+            {
+                return;
+            }
+
+            string area;
+            bool esLaFalla = Consultas.EsColumnaDeFalla(dgvDetalle.Columns[e.ColumnIndex].Name, out area)
+                && Consultas.ConFallaEn(vista.Row, area);
+
+            Color fondo = esLaFalla ? ColorFallaCelda : ColorConFalla;
+            e.CellStyle.BackColor = fondo;
+            e.CellStyle.SelectionBackColor = ControlPaint.Dark(fondo, 0.12f);
+            e.CellStyle.SelectionForeColor = Color.Black;
+            if (esLaFalla)
+            {
+                e.CellStyle.Font = new DrawingFont(dgvDetalle.Font, FontStyle.Bold);
+            }
+        }
+
+        // =====================================================================
+        // Lectura de filas
+        // =====================================================================
+
+        private static string LeerTexto(DataGridViewRow fila, string columna)
+        {
+            if (fila == null || !fila.DataGridView.Columns.Contains(columna))
+            {
+                return string.Empty;
+            }
+
+            object valor = fila.Cells[columna].Value;
+            return valor == null || valor == DBNull.Value ? string.Empty : valor.ToString();
+        }
+
+        private static int LeerEntero(DataGridViewRow fila, string columna)
+        {
+            int numero;
+            return int.TryParse(LeerTexto(fila, columna), out numero) ? numero : 0;
+        }
+
+        /// <summary>Sesion (idcodigos_accesos) de una fila de la tabla de sesiones; 0 si no la tiene.</summary>
+        private static int ObtenerIdSesion(DataGridViewRow fila)
+        {
+            return LeerEntero(fila, "idcodigos_accesos");
+        }
+
+        private static SesionFila LeerSesionFila(DataGridViewRow fila)
+        {
+            return new SesionFila
+            {
+                IdSesion = ObtenerIdSesion(fila),
+                Codigo = LeerTexto(fila, "codigo"),
+                Profesor = string.IsNullOrWhiteSpace(LeerTexto(fila, "profesor")) ? "Bitacora" : LeerTexto(fila, "profesor"),
+                Fecha = LeerTexto(fila, "fecha"),
+                HoraEntrada = LeerTexto(fila, "hora_entrada")
+            };
+        }
+
+        /// <summary>
+        /// Nombre de archivo "codigo_fecha_HHmm_profesor.pdf": el mismo codigo tiene
+        /// una sesion por fecha, asi que la fecha y la hora de entrada las distinguen.
+        /// </summary>
+        private string NombreArchivoSesion(SesionFila sesion)
+        {
+            string fecha = sesion.Fecha.Length >= 10 ? sesion.Fecha.Substring(0, 10) : sesion.Fecha;
+            string hora = sesion.HoraEntrada.Replace(":", "");
+            if (hora.Length > 4)
+            {
+                hora = hora.Substring(0, 4);
+            }
+
+            string[] partes = { sesion.Codigo, fecha, hora, sesion.Profesor };
+            string nombre = string.Join("_", partes.Where(parte => !string.IsNullOrWhiteSpace(parte)));
+            return SanitizarNombreArchivo(nombre) + ".pdf";
+        }
+
+        // =====================================================================
+        // Acciones
+        // =====================================================================
 
         private void DescargarSeleccionado()
         {
-            DataGridViewRow fila = ObtenerFilaSeleccionada();
-            if (fila == null)
+            if (dgvSesiones.CurrentRow == null)
             {
+                MessageBox.Show("Selecciona una sesion de la tabla de arriba.", "Seleccion requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            string codigo = fila.Cells["codigo"]?.Value?.ToString();
-            if (string.IsNullOrWhiteSpace(codigo))
+            SesionFila sesion = LeerSesionFila(dgvSesiones.CurrentRow);
+            if (sesion.IdSesion == 0)
             {
-                MessageBox.Show("La fila seleccionada no tiene un codigo valido.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("La fila seleccionada no tiene una sesion valida.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            DescargarPdfCodigo(codigo, fila.Cells["profesor"]?.Value?.ToString());
+            DescargarPdfSesion(sesion);
         }
 
         private void DescargarPorLote()
         {
-            List<DataGridViewRow> filasOrigen = dgvBitacoras.SelectedRows.Count > 0
-                ? dgvBitacoras.SelectedRows.Cast<DataGridViewRow>().ToList()
-                : dgvBitacoras.Rows.Cast<DataGridViewRow>().Where(fila => fila.Visible).ToList();
+            List<DataGridViewRow> filasOrigen = dgvSesiones.SelectedRows.Count > 0
+                ? dgvSesiones.SelectedRows.Cast<DataGridViewRow>().ToList()
+                : dgvSesiones.Rows.Cast<DataGridViewRow>().Where(fila => fila.Visible).ToList();
 
-            List<(string Codigo, string Profesor)> codigos = filasOrigen
-                .Where(fila => fila.Cells["codigo"]?.Value != null)
-                .Select(fila => (
-                    Codigo: fila.Cells["codigo"].Value.ToString(),
-                    Profesor: fila.Cells["profesor"]?.Value?.ToString() ?? "Bitacora"))
-                .Where(item => !string.IsNullOrWhiteSpace(item.Codigo))
-                .GroupBy(item => item.Codigo)
+            List<SesionFila> sesiones = filasOrigen
+                .Select(LeerSesionFila)
+                .Where(sesion => sesion.IdSesion != 0)
+                .GroupBy(sesion => sesion.IdSesion)
                 .Select(grupo => grupo.First())
                 .ToList();
 
-            if (codigos.Count == 0)
+            if (sesiones.Count == 0)
             {
-                MessageBox.Show("No hay bitacoras disponibles para descargar.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("No hay sesiones disponibles para descargar.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -410,12 +692,20 @@ namespace DigBit
             }
 
             int descargadas = 0;
-            foreach ((string codigo, string profesor) in codigos)
+            HashSet<string> nombresUsados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (SesionFila sesion in sesiones)
             {
-                string nombreArchivo = $"{codigo}_{SanitizarNombreArchivo(profesor)}.pdf";
+                string nombreArchivo = NombreArchivoSesion(sesion);
+                if (!nombresUsados.Add(nombreArchivo))
+                {
+                    // Dos sesiones con el mismo codigo, fecha y hora: se distinguen por su id.
+                    nombreArchivo = Path.GetFileNameWithoutExtension(nombreArchivo) + "_" + sesion.IdSesion + ".pdf";
+                    nombresUsados.Add(nombreArchivo);
+                }
+
                 string rutaCompleta = Path.Combine(carpetaDestino, nombreArchivo);
 
-                if (GenerarPdfCodigo(codigo, profesor, rutaCompleta))
+                if (GenerarPdfSesion(sesion.IdSesion, sesion.Profesor, rutaCompleta))
                 {
                     descargadas++;
                 }
@@ -437,44 +727,60 @@ namespace DigBit
                 return;
             }
 
-            DataGridViewRow fila = ObtenerFilaSeleccionada();
-            if (fila == null)
+            if (dgvDetalle.CurrentRow == null)
             {
+                MessageBox.Show("Selecciona el alumno cuyo registro quieres editar, en la tabla de abajo.", "Seleccion requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            using (EditarBitacoraAdministrador editor = new EditarBitacoraAdministrador(fila))
+            using (EditarBitacoraAdministrador editor = new EditarBitacoraAdministrador(dgvDetalle.CurrentRow))
             {
                 if (editor.ShowDialog() == DialogResult.OK)
                 {
-                    CargarBitacoras();
+                    int idSesion = idSesionMostrada;
+                    CargarSesiones();
                     AplicarFiltros();
+                    SeleccionarSesion(idSesion);
                 }
             }
         }
 
-        private void DescargarPdfCodigo(string codigoAcceso, string nombreProfesor)
+        /// <summary>Vuelve a dejar seleccionada una sesion tras recargar la tabla.</summary>
+        private void SeleccionarSesion(int idSesion)
         {
-            string nombreArchivo = DateTime.Now.ToString("dd-M-yyyy-HH_mm_ss") + "_" + (string.IsNullOrWhiteSpace(nombreProfesor) ? "Bitacora" : nombreProfesor) + ".pdf";
-            string rutaCompleta = ObtenerRutaDestinoPdf(nombreArchivo);
+            foreach (DataGridViewRow fila in dgvSesiones.Rows)
+            {
+                if (ObtenerIdSesion(fila) == idSesion)
+                {
+                    dgvSesiones.ClearSelection();
+                    fila.Selected = true;
+                    dgvSesiones.CurrentCell = fila.Cells[dgvSesiones.Columns["codigo"].Index];
+                    return;
+                }
+            }
+        }
+
+        private void DescargarPdfSesion(SesionFila sesion)
+        {
+            string rutaCompleta = ObtenerRutaDestinoPdf(NombreArchivoSesion(sesion));
             if (string.IsNullOrWhiteSpace(rutaCompleta))
             {
                 return;
             }
 
-            if (GenerarPdfCodigo(codigoAcceso, nombreProfesor, rutaCompleta))
+            if (GenerarPdfSesion(sesion.IdSesion, sesion.Profesor, rutaCompleta))
             {
                 MessageBox.Show("El PDF se guardo correctamente en: " + rutaCompleta, "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 AbrirVistaPreviaPdf(rutaCompleta);
             }
         }
 
-        private bool GenerarPdfCodigo(string codigoAcceso, string nombreProfesor, string rutaCompleta)
+        private bool GenerarPdfSesion(int idSesion, string nombreProfesor, string rutaCompleta)
         {
-            Usuario datos = consultas.ConsultarDatosPdf(codigoAcceso);
+            Usuario datos = consultas.ConsultarDatosPdfSesion(idSesion);
             if (datos == null)
             {
-                MessageBox.Show("No se encontraron datos para el codigo seleccionado.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("No se encontraron datos de la sesion seleccionada.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return false;
             }
 
@@ -511,7 +817,7 @@ namespace DigBit
                     XMLWorkerHelper.GetInstance().ParseXHtml(writer, pdfDoc, sr);
                 }
 
-                DataTable detalles = consultas.consultaRegistro(codigoAcceso);
+                DataTable detalles = consultas.consultaRegistroSesion(idSesion);
                 AgregarTablaAlPDF(pdfDoc, detalles);
                 pdfDoc.Close();
             }
@@ -612,20 +918,46 @@ namespace DigBit
             pdfTable.AddCell(new PdfPCell(new Phrase("Numero de Computadora")) { BackgroundColor = BaseColor.LIGHT_GRAY, Padding = 4f });
             pdfTable.AddCell(new PdfPCell(new Phrase("Comentarios")) { BackgroundColor = BaseColor.LIGHT_GRAY, Padding = 4f });
 
+            BaseColor suave = new BaseColor(ColorConFalla.R, ColorConFalla.G, ColorConFalla.B);
+            BaseColor fuerte = new BaseColor(ColorFallaCelda.R, ColorFallaCelda.G, ColorFallaCelda.B);
+            iTextSharp.text.Font negrita = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 10f);
+            bool hayFallas = false;
+
             int numeroFila = 1;
             foreach (DataRow row in detalles.Rows)
             {
-                pdfTable.AddCell(new PdfPCell(new Phrase(numeroFila.ToString())) { Padding = 4f });
-                pdfTable.AddCell(new PdfPCell(new Phrase(row["nombre_completo"].ToString())) { Padding = 4f });
-                pdfTable.AddCell(new PdfPCell(new Phrase(row["numero_computadora"].ToString())) { Padding = 4f });
+                // Fila en tono suave si reporto algo; la celda de la falla, en tono fuerte.
+                bool conFalla = Consultas.ConFalla(row);
+                hayFallas |= conFalla;
 
-                string comentarios = $"Red: {row["comentarios_red"]}, Hardware: {row["comentarios_hardware"]}, Software: {row["comentarios_software"]}";
-                pdfTable.AddCell(new PdfPCell(new Phrase(comentarios)) { Padding = 4f });
+                string[] celdas = { numeroFila.ToString(), row["nombre_completo"].ToString(), row["numero_computadora"].ToString(), Consultas.DescribirFallas(row) };
+                for (int i = 0; i < celdas.Length; i++)
+                {
+                    bool esLaFalla = conFalla && i == celdas.Length - 1;
+                    PdfPCell celda = new PdfPCell(new Phrase(celdas[i], esLaFalla ? negrita : null)) { Padding = 4f };
+                    if (conFalla)
+                    {
+                        celda.BackgroundColor = esLaFalla ? fuerte : suave;
+                    }
+
+                    pdfTable.AddCell(celda);
+                }
+
                 numeroFila++;
             }
 
             pdfDoc.Add(pdfTable);
+
+            if (hayFallas)
+            {
+                pdfDoc.Add(new Paragraph("Celda naranja intensa: la falla o el comentario que reporto el alumno.",
+                    FontFactory.GetFont(FontFactory.HELVETICA, 8f)) { SpacingBefore = 6f });
+            }
         }
+
+        // =====================================================================
+        // Eventos
+        // =====================================================================
 
         private void btnAplicarFiltro_Click(object sender, EventArgs e)
         {
@@ -659,7 +991,7 @@ namespace DigBit
                 return;
             }
 
-            dgvBitacoras.ClearSelection();
+            dgvSesiones.ClearSelection();
         }
 
         private void btnEditarSeleccion_Click(object sender, EventArgs e)
@@ -667,7 +999,7 @@ namespace DigBit
             EditarSeleccionado();
         }
 
-        private void dgvBitacoras_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        private void dgvDetalle_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0)
             {
@@ -677,10 +1009,7 @@ namespace DigBit
             if (permitirEdicion)
             {
                 EditarSeleccionado();
-                return;
             }
-
-            DescargarSeleccionado();
         }
 
         private void btnCerrar_Click(object sender, EventArgs e)

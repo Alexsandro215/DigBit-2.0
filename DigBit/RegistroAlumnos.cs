@@ -10,10 +10,6 @@ namespace DigBit
     public partial class RegistroAlumnos : Form
     {
         // Declaración de variables
-        private RegistroProfesores profesoresForm = new RegistroProfesores(); // Instancia del formulario de profesores
-        private Timer animacionTimer; // Temporizador para la animación
-        private double dtransparencia = 0.0; // Valor de transparencia para la animación
-        private double dtransparencia2 = 1.0; // Valor de transparencia para la animación
         private Conexion mconexion;
         private InsercionDatos insercionDatos;
         private Consultas consultas;
@@ -29,46 +25,14 @@ namespace DigBit
             insercionDatos = new InsercionDatos();
         }
 
-        // Evento del botón para ocultar el formulario actual y mostrar el formulario de inicio de sesión
+        // (No esta cableado en el Designer: el boton usa btnCancelar_Click_1.) Se
+        // deja cerrando el formulario para que nadie vuelva a crear un Login suelto;
+        // el Login lo gestiona AppContexto.
         private void btnCancelar_Click(object sender, EventArgs e)
         {
-            Login log = new Login();
-            log.Show();
-            this.Hide();
+            this.Close();
         }
 
-        // Evento del botón para iniciar la animación y mostrar el formulario de profesores
-        private void btnProfesores_Click(object sender, EventArgs e)
-        {
-            //Iniciar la animación
-            dtransparencia = 0;
-            animacionTimer = new Timer();
-            animacionTimer.Interval = 15; // Intervalo de tiempo para la animación (en milisegundos)
-            animacionTimer.Tick += AnimacionTimer_Tick; // Aquí se conecta el evento Tick del temporizador
-            animacionTimer.Start();
-        }
-
-        // Evento del temporizador para controlar la animación
-        private void AnimacionTimer_Tick(object sender, EventArgs e)
-        {
-            // Incrementar la transparencia para la animación
-            dtransparencia += 0.15;
-            dtransparencia2 -= 0.05;
-
-            // Detener la animación cuando alcanza la opacidad completa
-            if (dtransparencia >= 1)
-            {
-                dtransparencia = 1;
-                dtransparencia2 = 0;
-                animacionTimer.Stop();
-                this.Hide();
-            }
-
-            // Establecer la opacidad del formulario de profesores y del formulario actual
-            profesoresForm.Opacity = dtransparencia;
-            this.Opacity = dtransparencia2;
-            profesoresForm.Show();
-        }
 
 
         private void txtNombre_Enter(object sender, EventArgs e)
@@ -210,8 +174,25 @@ namespace DigBit
             string contraseña = txtPassword.Texts;
             string correo = rjTcorreo.Texts;
 
-            // Llama a la función InsertarUsuario con los valores de los TextBox
-            return insercionDatos.InsertarUsuario(nombre, apellidoPaterno, apellidoMaterno, matricula, contraseña, 1, correo);
+            // Fase 6: el alumno se guarda con su carrera y grupo (antes se pedian y
+            // se tiraban). El grupo es lo que permite marcar en el informe a quien
+            // registra fuera de su clase.
+            OpcionCombo carrera = cbCarrera.SelectedItem as OpcionCombo;
+            OpcionCombo grupo = cbGrupo.SelectedItem as OpcionCombo;
+            if (carrera == null || grupo == null)
+            {
+                MessageBox.Show("Selecciona tu carrera y tu grupo.", "Datos incompletos", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+
+            string error = insercionDatos.InsertarAlumno(nombre, apellidoPaterno, apellidoMaterno, matricula, contraseña, correo, carrera.Id, grupo.Id);
+            if (error != null)
+            {
+                MessageBox.Show("No se pudo registrar al alumno: " + error, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+
+            return true;
         }
         private void btnRegistrar_Click(object sender, EventArgs e)
         {

@@ -86,7 +86,7 @@
             this.btnDescargarListaAsistencia.Name = "btnDescargarListaAsistencia";
             this.btnDescargarListaAsistencia.Size = new System.Drawing.Size(240, 31);
             this.btnDescargarListaAsistencia.TabIndex = 4;
-            this.btnDescargarListaAsistencia.Text = "Descargar lista de asistencia";
+            this.btnDescargarListaAsistencia.Text = "Bitacora de mis clases";
             this.btnDescargarListaAsistencia.TextColor = System.Drawing.Color.Black;
             this.btnDescargarListaAsistencia.UseVisualStyleBackColor = false;
             this.btnDescargarListaAsistencia.Click += new System.EventHandler(this.btnDescargarListaAsistencia_Click);
@@ -107,7 +107,7 @@
             this.btnGenerarCodigoAcceso.Name = "btnGenerarCodigoAcceso";
             this.btnGenerarCodigoAcceso.Size = new System.Drawing.Size(240, 31);
             this.btnGenerarCodigoAcceso.TabIndex = 5;
-            this.btnGenerarCodigoAcceso.Text = "Generar código de acceso";
+            this.btnGenerarCodigoAcceso.Text = "Mis clases y horario";
             this.btnGenerarCodigoAcceso.TextColor = System.Drawing.Color.Black;
             this.btnGenerarCodigoAcceso.UseVisualStyleBackColor = false;
             this.btnGenerarCodigoAcceso.Click += new System.EventHandler(this.btnGenerarCodigoAcceso_Click);

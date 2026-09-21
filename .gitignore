@@ -40,3 +40,11 @@ appsettings.Local.json
 # ---- Sistema ----
 Thumbs.db
 Desktop.ini
+
+# ---- Herramientas descargadas por build.ps1 ----
+tools/
+
+# Paquete para probar en una maquina virtual (se regenera; ~37 MB)
+respaldos/
+DigBit-VM.zip
+DigBit-VM-actualizacion.zip

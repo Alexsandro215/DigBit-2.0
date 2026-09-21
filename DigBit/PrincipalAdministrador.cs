@@ -7,12 +7,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using DigBit.Infraestructura;
 
 namespace DigBit
 {
     public partial class PrincipalAdministrador : Form
     {
-        private Bitacora_profesor bitProf;
+
         private GestionBitacorasAdministrador verBitacorasAdmin;
         private GestionBitacorasAdministrador modificarBitacorasAdmin;
         private RegistroAlumnos regAlum;
@@ -24,10 +25,16 @@ namespace DigBit
         private editarLab editLab;
         private IngresarNuevoGrupo ingGrupo;
         private IngresarPregunta ingPregunta;
+        private AdministrarHorarios adminHorarios;
 
         public PrincipalAdministrador()
         {
             InitializeComponent();
+            Kiosco.Aplicar(this);
+            if (AppContexto.Actual != null)
+            {
+                AppContexto.Actual.Registrar(this);
+            }
             txtAlumnos.Enabled = false;
             txtBitacoras.Enabled = false;
             txtLaboratorio.Enabled = false;
@@ -53,18 +60,13 @@ namespace DigBit
             }
         }
 
+        /// <summary>
+        /// Descargar una bitacora es elegir su sesion, que es justo lo que hace
+        /// "Ver bitacoras": una sola pantalla en vez de dos que hacian lo mismo.
+        /// </summary>
         private void btnDescargarBitacora_Click(object sender, EventArgs e)
         {
-            if (bitProf == null || bitProf.IsDisposed)
-            {
-                //Si no existe crea la instancia de la clase
-                bitProf = new Bitacora_profesor();
-            }
-            //Muestra el formulario
-            bitProf.Show();
-
-            //Si esta en segundo plano lo trae al frente
-            bitProf.BringToFront();
+            btnVerBitacoras_Click(sender, e);
         }
 
         private void btnVerBitacoras_Click(object sender, EventArgs e)
@@ -74,7 +76,7 @@ namespace DigBit
                 verBitacorasAdmin = new GestionBitacorasAdministrador(false);
             }
 
-            verBitacorasAdmin.Show();
+            verBitacorasAdmin.Show(this);
             verBitacorasAdmin.BringToFront();
         }
 
@@ -85,7 +87,7 @@ namespace DigBit
                 modificarBitacorasAdmin = new GestionBitacorasAdministrador(true);
             }
 
-            modificarBitacorasAdmin.Show();
+            modificarBitacorasAdmin.Show(this);
             modificarBitacorasAdmin.BringToFront();
         }
 
@@ -97,7 +99,7 @@ namespace DigBit
                 regAlum = new RegistroAlumnos();
             }
             //Muestra el formulario
-            regAlum.Show();
+            regAlum.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             regAlum.BringToFront();
@@ -111,7 +113,7 @@ namespace DigBit
                 elimUser = new EliminarUser();
             }
             //Muestra el formulario
-            elimUser.Show();
+            elimUser.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             elimUser.BringToFront();
@@ -125,7 +127,7 @@ namespace DigBit
                 ePerfi = new editar_Perfil("alumno");
             }
             //Muestra el formulario
-            ePerfi.Show();
+            ePerfi.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             ePerfi.BringToFront();
@@ -133,7 +135,8 @@ namespace DigBit
 
         private void btnSalir_Click(object sender, EventArgs e)
         {
-            Application.Exit();
+            // Salir de la sesion, no de la aplicacion (DigBit puede ser el shell).
+            AppContexto.Actual.CerrarSesion();
         }
 
         private void btnIngresarProfesor_Click(object sender, EventArgs e)
@@ -144,7 +147,7 @@ namespace DigBit
                 regProf = new RegistroProfesores();
             }
             //Muestra el formulario
-            regProf.Show();
+            regProf.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             regProf.BringToFront();
@@ -153,14 +156,14 @@ namespace DigBit
         private void btnEliminarProfesor_Click(object sender, EventArgs e)
         {
             EliminarUser eliminarUser = new EliminarUser();
-            eliminarUser.Show();
+            eliminarUser.Show(this);
 
         }
 
         private void btnEditarProfesor_Click(object sender, EventArgs e)
         {
             editar_Perfil ePerfil = new editar_Perfil("profesor");
-            ePerfil.Show();
+            ePerfil.Show(this);
         }
 
         private void btnIngresarLaboratorio_Click(object sender, EventArgs e)
@@ -171,7 +174,7 @@ namespace DigBit
                 ingLabo = new ingresar();
             }
             //Muestra el formulario
-            ingLabo.Show();
+            ingLabo.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             ingLabo.BringToFront();
@@ -185,7 +188,7 @@ namespace DigBit
                 borrarlabo = new BorrarLabo();
             }
             //Muestra el formulario
-            borrarlabo.Show();
+            borrarlabo.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             borrarlabo.BringToFront();
@@ -199,7 +202,7 @@ namespace DigBit
                 editLab = new editarLab();
             }
             //Muestra el formulario
-            editLab.Show();
+            editLab.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             editLab.BringToFront();
@@ -213,7 +216,7 @@ namespace DigBit
                 ingGrupo = new IngresarNuevoGrupo();
             }
             //Muestra el formulario
-            ingGrupo.Show();
+            ingGrupo.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             ingGrupo.BringToFront();
@@ -227,10 +230,22 @@ namespace DigBit
                 ingPregunta = new IngresarPregunta();
             }
             //Muestra el formulario
-            ingPregunta.Show();
+            ingPregunta.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             ingPregunta.BringToFront();
+        }
+
+        private void btnHorarios_Click(object sender, EventArgs e)
+        {
+            // Fase 6: clases con codigo fijo, horario por laboratorio y excepciones.
+            if (adminHorarios == null || adminHorarios.IsDisposed)
+            {
+                adminHorarios = new AdministrarHorarios();
+            }
+
+            adminHorarios.Show(this);
+            adminHorarios.BringToFront();
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using MySql.Data.MySqlClient;
+using DigBit.conexion;
 using System;
 using System.Runtime.Remoting.Messaging;
 using System.Security.Cryptography;
@@ -7,13 +8,6 @@ using System.Windows.Forms;
 
 namespace DigBit
 {
-    public enum ResultadoInsercionCodigo
-    {
-        Exito,
-        Duplicado,
-        Error
-    }
-
     public class InsercionDatos
     {
         private Conexion mconexion;
@@ -23,28 +17,12 @@ namespace DigBit
             mconexion = new Conexion();
         }
 
-        private string ObtenerHashMD5(string input)
-        {
-            using (MD5 md5 = MD5.Create())
-            {
-                byte[] bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
-                StringBuilder builder = new StringBuilder();
-
-                foreach (byte b in bytes)
-                {
-                    builder.Append(b.ToString("x2"));
-                }
-
-                return builder.ToString();
-            }
-        }
-
         public bool InsertarUsuario(string nombre, string apellidoPaterno, string apellidoMaterno, string matricula, string contraseña, int tipoUsuario, string correo)
         {
             try
             {
-                // Aplicar MD5 a la contraseña
-                contraseña = ObtenerHashMD5(contraseña);
+                // PBKDF2 con sal aleatoria (ver Contrasenas): nunca la contrasena en claro.
+                contraseña = Contrasenas.Hash(contraseña);
 
                 // Realizar la inserción en la base de datos
                 string consulta = "INSERT INTO usuarios (nombre, apellido_paterno, apellido_materno, numero_identificador, password, fk_tipo_usuario, correo) " +
@@ -82,19 +60,58 @@ namespace DigBit
                 return false; // Error durante la inserción
             }
         }
-        private string ObtenerHashMD5Profe(string input)
+        /// <summary>
+        /// Registra un alumno CON su carrera y grupo (carrera_grupo_semestre), en
+        /// una transaccion. Antes RegistroAlumnos pedia carrera y grupo pero nunca
+        /// los guardaba; desde la fase 6 hacen falta para marcar en el informe al
+        /// los informes por grupo. Devuelve el mensaje de error, o
+        /// null si todo fue bien.
+        /// </summary>
+        public string InsertarAlumno(string nombre, string apellidoPaterno, string apellidoMaterno, string matricula, string contraseña, string correo, int idCarrera, int idGrupo)
         {
-            using (MD5 md5 = MD5.Create())
+            string hash = Contrasenas.Hash(contraseña);
+            using (MySqlConnection conexion = mconexion.GetConexion())
+            using (MySqlTransaction transaccion = conexion.BeginTransaction())
             {
-                byte[] bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
-                StringBuilder builder = new StringBuilder();
-
-                foreach (byte b in bytes)
+                try
                 {
-                    builder.Append(b.ToString("x2"));
-                }
+                    int idUsuario;
+                    using (MySqlCommand usuario = new MySqlCommand(
+                        "INSERT INTO usuarios (nombre, apellido_paterno, apellido_materno, numero_identificador, password, fk_tipo_usuario, correo) " +
+                        "VALUES (@Nombre, @ApellidoPaterno, @ApellidoMaterno, @Matricula, @Password, 1, @Correo); SELECT LAST_INSERT_ID();", conexion, transaccion))
+                    {
+                        usuario.Parameters.AddWithValue("@Nombre", nombre);
+                        usuario.Parameters.AddWithValue("@ApellidoPaterno", apellidoPaterno);
+                        usuario.Parameters.AddWithValue("@ApellidoMaterno", apellidoMaterno);
+                        usuario.Parameters.AddWithValue("@Matricula", matricula);
+                        usuario.Parameters.AddWithValue("@Password", hash);
+                        usuario.Parameters.AddWithValue("@Correo", correo);
+                        idUsuario = Convert.ToInt32(usuario.ExecuteScalar());
+                    }
 
-                return builder.ToString();
+                    using (MySqlCommand grupo = new MySqlCommand(
+                        "INSERT INTO carrera_grupo_semestre (usuarios_numero_identificador, carreras_idcarreras, grupos_idgrupos, semestres_idsemestres) " +
+                        "VALUES (@Usuario, @Carrera, @Grupo, NULL)", conexion, transaccion))
+                    {
+                        grupo.Parameters.AddWithValue("@Usuario", idUsuario);
+                        grupo.Parameters.AddWithValue("@Carrera", idCarrera);
+                        grupo.Parameters.AddWithValue("@Grupo", idGrupo);
+                        grupo.ExecuteNonQuery();
+                    }
+
+                    transaccion.Commit();
+                    return null;
+                }
+                catch (MySqlException ex) when (ex.Number == 1062)
+                {
+                    transaccion.Rollback();
+                    return "Ya existe un usuario con la matricula " + matricula + ".";
+                }
+                catch (Exception ex)
+                {
+                    transaccion.Rollback();
+                    return ex.Message;
+                }
             }
         }
 
@@ -102,8 +119,8 @@ namespace DigBit
         {
             try
             {
-                // Aplicar MD5 a la contraseña
-                contraseña = ObtenerHashMD5Profe(contraseña);
+                // PBKDF2 con sal aleatoria (ver Contrasenas): nunca la contrasena en claro.
+                contraseña = Contrasenas.Hash(contraseña);
 
                 // Realizar la inserción en la base de datos
                 string consulta = "INSERT INTO usuarios (nombre, apellido_paterno, apellido_materno, numero_identificador, password, fk_tipo_usuario, correo) " +
@@ -209,49 +226,7 @@ namespace DigBit
             }
         }
 
-        public ResultadoInsercionCodigo insertarcodigo(string codAleatorio, string hora, int materias, int grupo, int laboratorio, int usuario, string fecha, string hora_entrada, string hora_salida)
-        {
-            try
-            {
-                string consulta = "INSERT INTO codigos_accesos (codigo, hora_registro, materias_id_materia, grupos_idgrupos, laboratorios_idlaboratorios, usuarios_idusuarios, fecha, hora_entrada, hora_salida)" +
-                                  " VALUES (@codAleatorio, @hora, @materias, @grupo, @laboratorio, @usuario, @fecha, @hora_entrada, @hora_salida)";
-                using (MySqlConnection conexion = mconexion.GetConexion())
-                {
-                    if (conexion != null)
-                    {
-                        using (MySqlCommand mysqlCommand = new MySqlCommand(consulta, conexion))
-                        {
-                            mysqlCommand.Parameters.AddWithValue("@codAleatorio", codAleatorio);
-                            mysqlCommand.Parameters.AddWithValue("@hora", hora);
-                            mysqlCommand.Parameters.AddWithValue("@materias", materias);
-                            mysqlCommand.Parameters.AddWithValue("@grupo", grupo);
-                            mysqlCommand.Parameters.AddWithValue("@laboratorio", laboratorio);
-                            mysqlCommand.Parameters.AddWithValue("@usuario", usuario);
-                            mysqlCommand.Parameters.AddWithValue("@fecha", fecha);
-                            mysqlCommand.Parameters.AddWithValue("@hora_entrada", hora_entrada);
-                            mysqlCommand.Parameters.AddWithValue("@hora_salida", hora_salida);
-
-                            mysqlCommand.ExecuteNonQuery();
-                            return ResultadoInsercionCodigo.Exito;
-                        }
-                    }
-                    else
-                    {
-                        MessageBox.Show("Error al conectar a la base de datos", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return ResultadoInsercionCodigo.Error;
-                    }
-                }
-
-            }
-            catch (MySqlException ex) when (ex.Number == 1062)
-            {
-                return ResultadoInsercionCodigo.Duplicado;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error al intentar registrar el codigo, reintente: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return ResultadoInsercionCodigo.Error;
-            }
-        }
-    }
+        // hora_registro, fecha y hora_entrada las pone el SERVIDOR (NOW, CURDATE,
+        // CURTIME): son la ventana de validez del codigo y no pueden depender del
+        // reloj del equipo del profesor. Solo la hora de salida viaja como parametro.    }
 }

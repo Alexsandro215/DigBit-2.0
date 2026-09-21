@@ -1,66 +1,62 @@
 ﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
+using DigBit.conexion;
+using DigBit.Infraestructura;
 
 namespace DigBit
 {
+    /// <summary>
+    /// Alta de profesores. SOLO para el administrador: se abre desde su panel y
+    /// se cierra sola si la abre cualquier otro. Antes habia aqui codigo (sin
+    /// cablear) para saltar entre esta pantalla y el alta de alumnos, que es la
+    /// que sí puede abrir cualquiera desde el login; se quito para que nadie lo
+    /// vuelva a conectar por descuido.
+    /// </summary>
     public partial class RegistroProfesores : Form
     {
-        //private RegistroAlumnos AlumnosForm = new RegistroAlumnos();
-        private Timer animacionTimer;
-        private double transparencia = 0.0;
-        private double transparencia2 = 0.0;
-        private RegistroAlumnos regalum;
         private Conexion mconexion;
         private InsercionDatos insercionDatos;
+
         public RegistroProfesores()
         {
             InitializeComponent();
             mconexion = new Conexion();
             insercionDatos = new InsercionDatos();
+        }
 
+        /// <summary>
+        /// True si la sesion actual puede dar de alta profesores. Solo el
+        /// administrador; cualquier otro intento queda en el log.
+        /// </summary>
+        internal static bool PuedeAbrir()
+        {
+            if (Datos_User.EsAdministrador)
+            {
+                return true;
+            }
+
+            Log.Aviso("Intento de abrir el alta de profesores sin sesion de administrador (usuario: "
+                + (Datos_User.getUser() ?? "-") + ", tipo: " + Datos_User.TipoUsuario + ").");
+            return false;
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            if (PuedeAbrir())
+            {
+                return;
+            }
+
+            MessageBox.Show("Solo el administrador puede dar de alta profesores.", "Acceso restringido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            BeginInvoke(new Action(Close));
         }
 
         private void btnCancelar_Click(object sender, EventArgs e)
         {
             this.Hide();
         }
-
-        private void AnimationTimer_Tick(object sender, EventArgs e)
-        {
-            // Incrementar la transparencia para la animación
-            transparencia += 0.15;
-            transparencia2 -= 0.05;
-
-            // Detener la animación cuando alcanza la opacidad completa
-            if (transparencia >= 1)
-            {
-                transparencia = 1;
-                transparencia2 = 0;
-                animacionTimer.Stop();
-                this.Hide();
-            }
-
-            regalum.Opacity = transparencia;
-            this.Opacity = transparencia2;
-            regalum.Show();
-
-        }
-
-        private void btnAlumnos_Click(object sender, EventArgs e)
-        {
-            if (regalum == null)
-            { // Check if the instance exists
-                regalum = new RegistroAlumnos(); // Create only if not already created
-            }
-            transparencia = 0.0;
-            animacionTimer = new Timer();
-            animacionTimer.Interval = 15;
-            animacionTimer.Tick += AnimationTimer_Tick;
-            animacionTimer.Start();
-
-        }
-
        
 
         private void txtNombre_Enter(object sender, EventArgs e)

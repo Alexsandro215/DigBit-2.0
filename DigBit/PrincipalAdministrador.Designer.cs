@@ -50,6 +50,7 @@
             this.txtBitacoras = new DigBit.RJControls.RJTextBox();
             this.btnIngresarGrupo = new DigBit.RJControls.RJButton();
             this.btnNuevaPreguntaSeguridad = new DigBit.RJControls.RJButton();
+            this.btnHorarios = new DigBit.RJControls.RJButton();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.SuspendLayout();
             // 
@@ -331,7 +332,7 @@
             this.btnDescargarBitacora.Name = "btnDescargarBitacora";
             this.btnDescargarBitacora.Size = new System.Drawing.Size(99, 39);
             this.btnDescargarBitacora.TabIndex = 30;
-            this.btnDescargarBitacora.Text = "Descargar Bitacora";
+            this.btnDescargarBitacora.Text = "Descargar bitacora";
             this.btnDescargarBitacora.TextColor = System.Drawing.Color.Black;
             this.btnDescargarBitacora.UseVisualStyleBackColor = false;
             this.btnDescargarBitacora.Click += new System.EventHandler(this.btnDescargarBitacora_Click);
@@ -456,6 +457,26 @@
             this.btnNuevaPreguntaSeguridad.UseVisualStyleBackColor = false;
             this.btnNuevaPreguntaSeguridad.Click += new System.EventHandler(this.btnNuevaPreguntaSeguridad_Click);
             // 
+            // btnHorarios
+            // 
+            this.btnHorarios.BackColor = System.Drawing.Color.White;
+            this.btnHorarios.BackgroundColor = System.Drawing.Color.White;
+            this.btnHorarios.BorderColor = System.Drawing.Color.DarkGreen;
+            this.btnHorarios.BorderRadius = 20;
+            this.btnHorarios.BorderSize = 2;
+            this.btnHorarios.FlatAppearance.BorderSize = 0;
+            this.btnHorarios.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnHorarios.Font = new System.Drawing.Font("Century Gothic", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.btnHorarios.ForeColor = System.Drawing.Color.Black;
+            this.btnHorarios.Location = new System.Drawing.Point(594, 99);
+            this.btnHorarios.Name = "btnHorarios";
+            this.btnHorarios.Size = new System.Drawing.Size(115, 58);
+            this.btnHorarios.TabIndex = 9;
+            this.btnHorarios.Text = "Horarios";
+            this.btnHorarios.TextColor = System.Drawing.Color.Black;
+            this.btnHorarios.UseVisualStyleBackColor = false;
+            this.btnHorarios.Click += new System.EventHandler(this.btnHorarios_Click);
+            // 
             // PrincipalAdministrador
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -481,6 +502,7 @@
             this.Controls.Add(this.txtBitacoras);
             this.Controls.Add(this.btnIngresarGrupo);
             this.Controls.Add(this.btnNuevaPreguntaSeguridad);
+            this.Controls.Add(this.btnHorarios);
             this.Controls.Add(this.pictureBox1);
             this.Controls.Add(this.txtAdmin);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
@@ -499,6 +521,7 @@
         private System.Windows.Forms.Label txtAdmin;
         private RJControls.RJButton btnIngresarGrupo;
         private RJControls.RJButton btnNuevaPreguntaSeguridad;
+        private RJControls.RJButton btnHorarios;
         private System.Windows.Forms.PictureBox pictureBox1;
         private RJControls.RJButton btnIngresarLaboratorio;
         private RJControls.RJButton btnBorrarLaboratorio;

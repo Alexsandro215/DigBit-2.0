@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using DigBit.conexion;
+using DigBit.Infraestructura;
 namespace DigBit
 {
     public partial class Alumno_Principal : Form
@@ -17,6 +18,11 @@ namespace DigBit
         public Alumno_Principal()
         {
             InitializeComponent();
+            Kiosco.Aplicar(this);
+            if (AppContexto.Actual != null)
+            {
+                AppContexto.Actual.Registrar(this);
+            }
             txtBienvenido.Enabled = false;
             string smatricula = Datos_User.getUser();
 
@@ -28,21 +34,16 @@ namespace DigBit
 
         private void btnCambiarUsuario_Click(object sender, EventArgs e)
         {
-            //Crea un objeto de tipo login para cerrar el formulario y mostrarlo
-            Login log = new Login();
-
-            //Mostramos el formulatio
-            log.Show();
-
-            //Ocultamos el formulario que esta mostrando
-            this.Hide();
+            // Vuelve a un login limpio (olvida al usuario actual y cierra todo).
+            AppContexto.Actual.CerrarSesion();
         }
 
 
         private void btnSalir_Click(object sender, EventArgs e)
         {
-            //Se cierra la aplicación
-            Application.Exit();
+            // "Salir" es salir de la sesion, nunca de la aplicacion: en el
+            // laboratorio DigBit es el shell y no puede terminar.
+            AppContexto.Actual.CerrarSesion();
         }
 
         private void btnIngresarCodigoAcceso_Click(object sender, EventArgs e)
@@ -54,7 +55,7 @@ namespace DigBit
                 bucAlum = new Buscar_Codigo_Alumno();
             }
             //Muestra el formulario
-            bucAlum.Show();
+            bucAlum.Show(this);
 
             //Si esta en segundo plano lo trae al frente
             bucAlum.BringToFront();
@@ -64,7 +65,7 @@ namespace DigBit
         private void btnEditarPerfil_Click(object sender, EventArgs e)
         {
             editar_Perfil ep = new editar_Perfil("alumno");
-            ep.Show();
+            ep.Show(this);
         }
     }
 }

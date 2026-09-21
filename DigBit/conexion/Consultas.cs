@@ -1,3 +1,4 @@
+using DigBit.Infraestructura;
 using Google.Protobuf;
 using MySql.Data.MySqlClient;
 using MySqlX.XDevAPI.Common;
@@ -12,68 +13,66 @@ using System.Windows.Forms;
 
 namespace DigBit.conexion
 {
-    internal class Consultas
+    internal partial class Consultas
     {
         private Conexion mconexion;
 
         public Consultas()
         {
             mconexion = new Conexion();
-            Profesor_Principal profPrincipal = new Profesor_Principal();
         }
         public bool RealizarInicioSesion(string numeroIdentificador, string contraseña)
         {
             mconexion = new Conexion();
             try
             {
-                // Conectar a la base de datos
+                string almacenada = null;
+                int tipoUsuarioId = 0;
+
                 using (MySqlConnection conexion = mconexion.GetConexion())
                 {
-                    if (conexion != null)
+                    if (conexion == null)
                     {
-                        // Consulta SQL para obtener el tipo de usuario que coincide con el número de identificador ingresado
-                        // y la contraseña (asegúrate de que la contraseña en la base de datos esté almacenada como hash MD5)
-                        string consulta = "SELECT fk_tipo_usuario, password FROM usuarios WHERE numero_identificador = @NumeroIdentificador";
+                        MessageBox.Show("Error al conectar a la base de datos", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return false;
+                    }
 
-                        using (MySqlCommand mysqlcomand = new MySqlCommand(consulta, conexion))
+                    using (MySqlCommand consulta = new MySqlCommand(
+                        "SELECT fk_tipo_usuario, password FROM usuarios WHERE numero_identificador = @NumeroIdentificador", conexion))
+                    {
+                        consulta.Parameters.AddWithValue("@NumeroIdentificador", numeroIdentificador);
+
+                        // El lector se cierra aqui a proposito: la migracion del hash
+                        // manda un UPDATE por esta misma conexion, y no se puede con
+                        // un lector abierto.
+                        using (MySqlDataReader lector = consulta.ExecuteReader())
                         {
-                            mysqlcomand.Parameters.AddWithValue("@NumeroIdentificador", numeroIdentificador);
-
-                            using (MySqlDataReader mySqldatareader = mysqlcomand.ExecuteReader())
+                            if (lector.Read())
                             {
-                                if (mySqldatareader.Read())
-                                {
-                                    // Obtener la contraseña almacenada en la base de datos
-                                    string contraseñaAlmacenada = mySqldatareader[1].ToString();
-                                   
-                                    // Verificar la contraseña utilizando MD5
-                                    if (VerificarContraseñaMD5(contraseña, contraseñaAlmacenada))
-                                    {
-                                        
-                                        // Contraseña válida, obtener el tipo de usuario desde la consulta
-                                        int tipoUsuarioId = (int)Convert.ToInt64(mySqldatareader["fk_tipo_usuario"]);
-
-                                        // Establecer el número de identificación en la propiedad de la otra pestaña
-
-                                        // Verificar el tipo de usuario y abrir la pestaña correspondiente
-                                        AbrirPestanaSegunTipoUsuario(tipoUsuarioId, numeroIdentificador);
-
-                                        return true;
-                                    }
-                                    else
-                                    {
-                                       
-                                        MessageBox.Show("Número de identificador o contraseña incorrectos. Por favor, verifica tus credenciales.", "Error de inicio de sesión", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                    }
-                                }
+                                tipoUsuarioId = (int)Convert.ToInt64(lector["fk_tipo_usuario"]);
+                                almacenada = lector[1] == DBNull.Value ? null : lector[1].ToString();
                             }
                         }
                     }
-                    else
+
+                    bool necesitaRehash;
+                    if (almacenada == null || !Contrasenas.Verificar(contraseña, almacenada, out necesitaRehash))
                     {
-                        MessageBox.Show("Error al conectar a la base de datos", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        // El mismo mensaje exista o no el usuario: decir "ese numero no
+                        // existe" le regala a quien lo intente la lista de matriculas
+                        // validas.
+                        MessageBox.Show("Número de identificador o contraseña incorrectos. Por favor, verifica tus credenciales.", "Error de inicio de sesión", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return false;
+                    }
+
+                    if (necesitaRehash)
+                    {
+                        MigrarContrasena(conexion, numeroIdentificador, contraseña, Contrasenas.EsFormatoAntiguo(almacenada));
                     }
                 }
+
+                AbrirPestanaSegunTipoUsuario(tipoUsuarioId, numeroIdentificador);
+                return true;
             }
             catch (Exception ex)
             {
@@ -83,30 +82,35 @@ namespace DigBit.conexion
             return false;
         }
 
-        public bool VerificarContraseñaMD5(string contraseñaIngresada, string contraseñaAlmacenada)
+        /// <summary>
+        /// Migracion perezosa a PBKDF2. No se pueden recuperar las contrasenas
+        /// guardadas como MD5 para volver a procesarlas, asi que se aprovecha el
+        /// unico instante en que la aplicacion tiene la contrasena en claro: un
+        /// inicio de sesion correcto. Cuando en la base no queden hashes antiguos
+        /// se puede quitar el camino de MD5 de Contrasenas.
+        ///
+        /// Sirve tambien para subir las iteraciones mas adelante sin tocar a nadie.
+        /// </summary>
+        private static void MigrarContrasena(MySqlConnection conexion, string numeroIdentificador, string contraseña, bool desdeMd5)
         {
-            // Obtener el hash MD5 de la contraseña ingresada
-            string hashContraseñaIngresada = ObtenerHashMD5(contraseñaIngresada);
-
-            // Log para depuración
-
-            // Comparar el hash de la contraseña ingresada con el almacenado en la base de datos
-            return string.Equals(hashContraseñaIngresada, contraseñaAlmacenada, StringComparison.OrdinalIgnoreCase);
-        }
-
-        public string ObtenerHashMD5(string input)
-        {
-            using (MD5 md5 = MD5.Create())
+            try
             {
-                byte[] bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
-
-                StringBuilder builder = new StringBuilder();
-                foreach (byte b in bytes)
+                using (MySqlCommand actualizar = new MySqlCommand(
+                    "UPDATE usuarios SET password = @Password WHERE numero_identificador = @NumeroIdentificador", conexion))
                 {
-                    builder.Append(b.ToString("x2"));
+                    actualizar.Parameters.AddWithValue("@Password", Contrasenas.Hash(contraseña));
+                    actualizar.Parameters.AddWithValue("@NumeroIdentificador", numeroIdentificador);
+                    actualizar.ExecuteNonQuery();
                 }
 
-                return builder.ToString();
+                Log.Info("Contrasena de '" + numeroIdentificador + "' vuelta a guardar con PBKDF2"
+                    + (desdeMd5 ? " (venia de MD5)." : " (mas iteraciones)."));
+            }
+            catch (Exception ex)
+            {
+                // Que falle la migracion no debe impedir entrar: la contrasena ya se
+                // comprobo bien. Se reintentara en el proximo inicio de sesion.
+                Log.Error("Migrar a PBKDF2 la contrasena de '" + numeroIdentificador + "'", ex);
             }
         }
 
@@ -114,6 +118,10 @@ namespace DigBit.conexion
 
         public void AbrirPestanaSegunTipoUsuario(int tipoUsuarioId, String numeroIdentificador)
         {
+            // Queda en memoria para que cada pantalla sepa a quien atiende (por
+            // ejemplo, el alta de profesores solo se abre para el administrador).
+            Datos_User.TipoUsuario = tipoUsuarioId;
+
             switch (tipoUsuarioId)
             {
                 case 1:
@@ -127,6 +135,14 @@ namespace DigBit.conexion
                     Datos_User.SetUser(numeroIdentificador);
                     Profesor_Principal profPrincipal = new Profesor_Principal();
                     profPrincipal.Show();
+                    ocultarVentana();
+                    break;
+
+                case 3:
+                    // Administrador real (fase 6): antes era ADMINISTRADOR/123 en Login.cs.
+                    Datos_User.SetUser(numeroIdentificador);
+                    PrincipalAdministrador principalAdministrador = new PrincipalAdministrador();
+                    principalAdministrador.Show();
                     ocultarVentana();
                     break;
 
@@ -551,69 +567,115 @@ namespace DigBit.conexion
             }
         }
 
-        public bool buscarCodigoRegistro(string codigoAlumno, string idUsuario)
+        /// <summary>
+        /// Reloj del servidor. generarCodigo valida la hora de salida contra el, que
+        /// es la misma referencia con la que despues se validara al alumno.
+        /// </summary>
+        public DateTime AhoraServidor()
         {
-            try
+            using (MySqlConnection conexion = mconexion.GetConexion())
+            using (MySqlCommand comando = new MySqlCommand("SELECT NOW()", conexion))
             {
-                string consultaCodigo = "SELECT codigo, hora_registro FROM codigos_accesos WHERE codigo = @codigoAlumno;";
-                string consultaRegistro = "SELECT COUNT(*) FROM usuarios WHERE idusuarios = @idUsuario;";
+                return Convert.ToDateTime(comando.ExecuteScalar());
+            }
+        }
 
-                using (MySqlConnection conexion = mconexion.GetConexion())
+        // Minutos antes de la hora de entrada en que ya se acepta el codigo: los
+        // alumnos llegan y encienden el equipo antes de que empiece la clase.
+        // Despues de la hora de salida no se acepta nunca.
+        private const int MargenAntesDelInicioMinutos = 15;
+
+        /// <summary>
+        /// Ventana de validez de un codigo calculada con el reloj del SERVIDOR
+        /// (NOW()), no con el del equipo: cambiar la hora de la PC no sirve de nada.
+        /// Devuelve null si el codigo no existe. Lanza si la consulta falla o si el
+        /// codigo no tiene fecha y horas validas.
+        /// </summary>
+        public VentanaCodigo ObtenerVentanaCodigo(string codigo)
+        {
+            const string consulta = @"SELECT idcodigos_accesos,
+                                             codigo,
+                                             TIMESTAMP(fecha, hora_entrada) AS inicio,
+                                             TIMESTAMP(fecha, hora_salida)  AS fin,
+                                             NOW() AS ahora
+                                      FROM codigos_accesos
+                                      WHERE codigo = @Codigo
+                                      ORDER BY fecha DESC, hora_entrada DESC, idcodigos_accesos DESC
+                                      LIMIT 1";
+
+            using (MySqlConnection conexion = mconexion.GetConexion())
+            using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
+            {
+                comando.Parameters.AddWithValue("@Codigo", codigo);
+                using (MySqlDataReader reader = comando.ExecuteReader())
                 {
-
-                    // Verificar si el código existe en la tabla codigos_accesos
-                    using (MySqlCommand cmdCodigo = new MySqlCommand(consultaCodigo, conexion))
+                    if (!reader.Read())
                     {
-                        cmdCodigo.Parameters.AddWithValue("@codigoAlumno", codigoAlumno);
-                        using (MySqlDataReader readerCodigo = cmdCodigo.ExecuteReader())
-                        {
-                            if (readerCodigo.Read())
-                            {
-                                DateTime horaRegistro = readerCodigo.GetDateTime("hora_registro");
-                                DateTime horaActual = DateTime.Now;
-
-                                TimeSpan diferencia = horaActual - horaRegistro;
-
-                                if (diferencia.TotalMinutes > 8000000)
-                                {
-                                    MessageBox.Show("Acceso denegado. El código ha expirado.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                    return false;
-                                }
-
-                                readerCodigo.Close();
-
-                                // Verificar si el usuario ya se ha registrado con ese código
-                                using (MySqlCommand cmdRegistro = new MySqlCommand(consultaRegistro, conexion))
-                                {
-                                    cmdRegistro.Parameters.AddWithValue("@codigoAlumno", codigoAlumno);
-                                    cmdRegistro.Parameters.AddWithValue("@idUsuario", idUsuario);
-                                    int count = Convert.ToInt32(cmdRegistro.ExecuteScalar());
-
-                                    if (count > 0)
-                                    {
-                                        MessageBox.Show("Acceso denegado. El usuario ya ha registrado este código.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                        return false;
-                                    }
-                                    else
-                                    {
-                                        MessageBox.Show("Código encontrado y dentro del tiempo permitido", "Éxito", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                                        return true;
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                MessageBox.Show("Código no encontrado", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                return false;
-                            }
-                        }
+                        return null;
                     }
+
+                    if (reader.IsDBNull(reader.GetOrdinal("inicio")) || reader.IsDBNull(reader.GetOrdinal("fin")))
+                    {
+                        throw new InvalidOperationException("El codigo '" + codigo + "' no tiene fecha u horas de entrada y salida.");
+                    }
+
+                    VentanaCodigo ventana = new VentanaCodigo
+                    {
+                        IdCodigo = reader.GetInt32("idcodigos_accesos"),
+                        Codigo = reader.GetString("codigo"),
+                        Inicio = reader.GetDateTime("inicio"),
+                        Fin = reader.GetDateTime("fin"),
+                        AhoraServidor = reader.GetDateTime("ahora"),
+                        LeidoEnRelojLocal = DateTime.Now
+                    };
+                    ventana.Estado = CalcularEstado(ventana);
+                    return ventana;
                 }
             }
-            catch (Exception e)
+        }
+
+        internal static EstadoCodigo CalcularEstado(VentanaCodigo ventana)
+        {
+            if (ventana.AhoraServidor < ventana.Inicio.AddMinutes(-MargenAntesDelInicioMinutos))
             {
-                MessageBox.Show($"Error al buscar el código ingresado: {e.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return false;
+                return EstadoCodigo.AunNoEmpieza;
+            }
+
+            if (ventana.AhoraServidor > ventana.Fin)
+            {
+                return EstadoCodigo.Expirado;
+            }
+
+            return EstadoCodigo.Vigente;
+        }
+
+        /// <summary>
+        /// Lo que necesita la pantalla del alumno: el codigo existe, esta dentro de
+        /// su ventana y este alumno todavia no lo ha usado. Sustituye a
+        /// buscarCodigoRegistro, que comparaba con el reloj local con un umbral de
+        /// 15 anos y comprobaba el "ya registrado" contra la tabla de usuarios con
+        /// un id fijo.
+        /// </summary>
+        public VentanaCodigo ValidarCodigoParaAlumno(string codigo, int idUsuario)
+        {
+            VentanaCodigo ventana = ObtenerVentanaCodigo(codigo);
+            if (ventana != null && ventana.Estado == EstadoCodigo.Vigente && AlumnoYaRegistro(ventana.IdCodigo, idUsuario))
+            {
+                ventana.Estado = EstadoCodigo.YaRegistrado;
+            }
+
+            return ventana;
+        }
+
+        internal bool AlumnoYaRegistro(int idCodigo, int idUsuario)
+        {
+            const string consulta = "SELECT COUNT(*) FROM registros_bitacoras WHERE fk_codigo_accesos = @IdCodigo AND fk_usuario = @IdUsuario";
+            using (MySqlConnection conexion = mconexion.GetConexion())
+            using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
+            {
+                comando.Parameters.AddWithValue("@IdCodigo", idCodigo);
+                comando.Parameters.AddWithValue("@IdUsuario", idUsuario);
+                return Convert.ToInt32(comando.ExecuteScalar()) > 0;
             }
         }
 
@@ -1013,7 +1075,8 @@ namespace DigBit.conexion
             }
         }
  
-public int ObtenerIdPorMatricula(int matricula)
+// numero_identificador es VARCHAR: un numero de empleado como "EMP001" es valido.
+public int ObtenerIdPorMatricula(string matricula)
         {
             try
             {
@@ -1154,20 +1217,23 @@ public string ObtenerNombreLaboratorioPorCodigo(string codigoLaboratorio)
                 {
                     string consulta = @"
                 SELECT 
+                    ca.idcodigos_accesos,
                     ca.codigo,
+                    DATE_FORMAT(ca.fecha, '%Y-%m-%d') AS fecha,
                     DATE_FORMAT(ca.hora_registro, '%Y-%m-%d %H:%i:%s') AS fecha_generacion,
                     ca.hora_entrada,
                     ca.hora_salida,
-                    m.nombre_materia AS materia,
-                    g.nombre_grupo AS grupo,
-                    l.nombre_laboratorio AS laboratorio
+                    COALESCE(m.nombre_materia, '') AS materia,
+                    COALESCE(g.nombre_grupo, '') AS grupo,
+                    COALESCE(l.nombre_laboratorio, '') AS laboratorio,
+                    (SELECT COUNT(*) FROM registros_bitacoras rb WHERE rb.fk_codigo_accesos = ca.idcodigos_accesos) AS alumnos
                 FROM codigos_accesos ca
                 INNER JOIN usuarios u ON ca.usuarios_idusuarios = u.idusuarios
-                INNER JOIN materias m ON ca.materias_id_materia = m.id_materia
-                INNER JOIN grupos g ON ca.grupos_idgrupos = g.idgrupos
-                INNER JOIN laboratorios l ON ca.laboratorios_idlaboratorios = l.idlaboratorios
+                LEFT JOIN materias m ON ca.materias_id_materia = m.id_materia
+                LEFT JOIN grupos g ON ca.grupos_idgrupos = g.idgrupos
+                LEFT JOIN laboratorios l ON ca.laboratorios_idlaboratorios = l.idlaboratorios
                 WHERE u.numero_identificador = @NumeroIdentificador
-                ORDER BY ca.hora_registro DESC";
+                ORDER BY ca.fecha DESC, ca.hora_entrada DESC, ca.hora_registro DESC";
 
                     using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
                     {
@@ -1189,36 +1255,9 @@ public string ObtenerNombreLaboratorioPorCodigo(string codigoLaboratorio)
 
 
 
-        public DateTime ConsultaFecha(string codigoAcceso)
-        {
-            try
-            {
-                using (MySqlConnection conexion = mconexion.GetConexion())
-                {
-                    string consultaFecha = "SELECT hora_registro FROM codigos_accesos WHERE codigo = @Codigo";
-                    DateTime horaRegistro;
-                    using (MySqlCommand cmdCodigo = new MySqlCommand(consultaFecha, conexion))
-                    {
-                        cmdCodigo.Parameters.AddWithValue("@Codigo", codigoAcceso);
-                        object resultCodigo = cmdCodigo.ExecuteScalar();
-                        if (resultCodigo != null)
-                        {
-                            horaRegistro = Convert.ToDateTime(resultCodigo);
-                        }
-                        else
-                        {
-                            throw new Exception("No se encontró la fecha.");
-                        }
-                    }
-                    return horaRegistro;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error al ejecutar la consulta: " + ex);
-                throw;
-            }
-        }
+        // ConsultaFecha (la hora de generacion del codigo) se sustituyo por
+        // ObtenerVentanaCodigo: lo que importa es la ventana de la clase, no
+        // cuando se genero el codigo.
 
         public DataTable consultaRegistro(string codigo)
         {
@@ -1276,60 +1315,6 @@ public string ObtenerNombreLaboratorioPorCodigo(string codigoLaboratorio)
                 // Manejo de excepciones, puedes registrar el error o mostrar un mensaje al usuario
                 Console.WriteLine("Error al ejecutar la consulta: " + ex.Message);
                 throw;
-            }
-
-            return tablaResultado;
-        }
-
-        public DataTable ObtenerBitacorasAdministrador()
-        {
-            DataTable tablaResultado = new DataTable();
-
-            try
-            {
-                using (MySqlConnection conexion = mconexion.GetConexion())
-                {
-                    string consulta = @"
-                SELECT
-                    ca.codigo,
-                    DATE_FORMAT(ca.hora_registro, '%Y-%m-%d %H:%i:%s') AS fecha_generacion,
-                    prof.numero_identificador AS numero_empleado,
-                    CONCAT_WS(' ', prof.nombre, prof.apellido_paterno, prof.apellido_materno) AS profesor,
-                    alumno.numero_identificador AS matricula_alumno,
-                    CONCAT_WS(' ', alumno.nombre, alumno.apellido_paterno, alumno.apellido_materno) AS alumno,
-                    rb.numero_computadora,
-                    COALESCE(rb.falla_red, '') AS falla_red,
-                    COALESCE(rb.comentarios_red, '') AS comentarios_red,
-                    COALESCE(rb.falla_hardware, '') AS falla_hardware,
-                    COALESCE(rb.comentarios_hardware, '') AS comentarios_hardware,
-                    COALESCE(rb.falla_software, '') AS falla_software,
-                    COALESCE(rb.comentarios_software, '') AS comentarios_software,
-                    COALESCE(ca.hora_entrada, '') AS hora_entrada,
-                    COALESCE(ca.hora_salida, '') AS hora_salida,
-                    COALESCE(g.nombre_grupo, '') AS grupo,
-                    COALESCE(m.nombre_materia, '') AS materia,
-                    COALESCE(l.nombre_laboratorio, '') AS laboratorio,
-                    rb.fk_codigo_accesos,
-                    rb.fk_usuario
-                FROM registros_bitacoras rb
-                INNER JOIN usuarios alumno ON rb.fk_usuario = alumno.idusuarios
-                INNER JOIN codigos_accesos ca ON rb.fk_codigo_accesos = ca.idcodigos_accesos
-                INNER JOIN usuarios prof ON ca.usuarios_idusuarios = prof.idusuarios
-                LEFT JOIN grupos g ON ca.grupos_idgrupos = g.idgrupos
-                LEFT JOIN materias m ON ca.materias_id_materia = m.id_materia
-                LEFT JOIN laboratorios l ON ca.laboratorios_idlaboratorios = l.idlaboratorios
-                ORDER BY ca.hora_registro DESC, alumno.apellido_paterno, alumno.nombre";
-
-                    using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
-                    using (MySqlDataAdapter adapter = new MySqlDataAdapter(comando))
-                    {
-                        adapter.Fill(tablaResultado);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error al obtener las bitacoras: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
 
             return tablaResultado;
@@ -1421,6 +1406,21 @@ public string ObtenerNombreLaboratorioPorCodigo(string codigoLaboratorio)
         {
             try
             {
+                // Se vuelve a comprobar la ventana al guardar: el alumno puede haber
+                // dejado el formulario abierto hasta despues de la hora de salida.
+                VentanaCodigo ventana = ObtenerVentanaCodigo(codigoAcceso);
+                if (ventana == null)
+                {
+                    MessageBox.Show("El código de acceso ya no existe.", "Código no válido", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
+                }
+
+                if (ventana.Estado != EstadoCodigo.Vigente)
+                {
+                    MessageBox.Show("El código ya no está vigente (válido hasta las " + ventana.Fin.ToString("HH:mm") + "). Pídele uno nuevo a tu profesor.", "Código expirado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return false;
+                }
+
                 using (MySqlConnection conexion = mconexion.GetConexion())
                 {
                     // Obtener el ID del código de acceso
@@ -1487,6 +1487,13 @@ public string ObtenerNombreLaboratorioPorCodigo(string codigoLaboratorio)
                         }
                     }
                 }
+            }
+            catch (MySqlException ex) when (ex.Number == 1062)
+            {
+                // UNIQUE (fk_codigo_accesos, fk_usuario) en registros_bitacoras:
+                // doble clic en Guardar o segundo intento con el mismo codigo.
+                MessageBox.Show("Ya registraste tu bitácora con este código.", "Registro duplicado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return false;
             }
             catch (Exception ex)
             {

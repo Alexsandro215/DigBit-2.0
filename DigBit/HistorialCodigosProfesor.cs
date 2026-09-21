@@ -14,6 +14,11 @@ using DrawingFont = System.Drawing.Font;
 
 namespace DigBit
 {
+    /// <summary>
+    /// "Ver mis codigos" del profesor. Desde la fase 6 cada fila es una SESION
+    /// (una clase en una fecha): el codigo es fijo y se repite cada semana, asi
+    /// que el PDF se pide por idcodigos_accesos y no por el texto del codigo.
+    /// </summary>
     public class HistorialCodigosProfesor : Form
     {
         private readonly Consultas consultas;
@@ -54,7 +59,7 @@ namespace DigBit
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "Historial de codigos";
+            Text = "Mis sesiones";
 
             lblTitulo = new Label
             {
@@ -62,7 +67,7 @@ namespace DigBit
                 Font = new DrawingFont("Century Gothic", 18F, FontStyle.Bold),
                 ForeColor = Color.DarkGreen,
                 Location = new Point(28, 18),
-                Text = "Mis codigos generados"
+                Text = "Mis sesiones"
             };
 
             lblSubtitulo = new Label
@@ -71,7 +76,7 @@ namespace DigBit
                 Font = new DrawingFont("Century Gothic", 10.5F, FontStyle.Regular),
                 ForeColor = Color.FromArgb(50, 50, 50),
                 Location = new Point(30, 55),
-                Text = "Aqui puedes consultar tus codigos y descargar su PDF en automatico."
+                Text = "Cada fila es una sesion de clase (fecha, laboratorio, grupo y materia). Selecciona una y descarga su bitacora en PDF."
             };
 
             lblBusqueda = new Label
@@ -147,7 +152,7 @@ namespace DigBit
                 Font = new DrawingFont("Century Gothic", 9.75F, FontStyle.Bold),
                 ForeColor = Color.DarkGreen,
                 Location = new Point(30, 490),
-                Text = "Registros encontrados: 0"
+                Text = "Sesiones encontradas: 0"
             };
 
             btnDescargarPdf = CrearBoton("Descargar PDF", new Point(620, 485), new Size(150, 42));
@@ -202,12 +207,12 @@ namespace DigBit
                 if (!string.IsNullOrWhiteSpace(nombre))
                 {
                     nombreProfesor = nombre;
-                    lblSubtitulo.Text = $"Docente: {nombre}. Aqui puedes consultar tus codigos y descargar su PDF en automatico.";
+                    lblSubtitulo.Text = $"Docente: {nombre}. Cada fila es una sesion de clase; selecciona una y descarga su bitacora en PDF.";
                 }
             }
             catch
             {
-                lblSubtitulo.Text = $"Docente: {numeroIdentificador}. Aqui puedes consultar tus codigos y descargar su PDF en automatico.";
+                lblSubtitulo.Text = $"Docente: {numeroIdentificador}. Cada fila es una sesion de clase; selecciona una y descarga su bitacora en PDF.";
             }
         }
 
@@ -232,21 +237,38 @@ namespace DigBit
                 return;
             }
 
+            // El id de la sesion viaja oculto: es lo que identifica la fila para el PDF.
+            dgvCodigos.Columns["idcodigos_accesos"].Visible = false;
+            dgvCodigos.Columns["fecha_generacion"].Visible = false;
+
+            dgvCodigos.Columns["fecha"].HeaderText = "Fecha";
             dgvCodigos.Columns["codigo"].HeaderText = "Codigo";
-            dgvCodigos.Columns["fecha_generacion"].HeaderText = "Fecha de generacion";
             dgvCodigos.Columns["hora_entrada"].HeaderText = "Hora de entrada";
             dgvCodigos.Columns["hora_salida"].HeaderText = "Hora de salida";
             dgvCodigos.Columns["materia"].HeaderText = "Materia";
             dgvCodigos.Columns["grupo"].HeaderText = "Grupo";
             dgvCodigos.Columns["laboratorio"].HeaderText = "Laboratorio";
+            dgvCodigos.Columns["alumnos"].HeaderText = "Alumnos";
 
-            dgvCodigos.Columns["codigo"].FillWeight = 18;
-            dgvCodigos.Columns["fecha_generacion"].FillWeight = 22;
-            dgvCodigos.Columns["hora_entrada"].FillWeight = 15;
-            dgvCodigos.Columns["hora_salida"].FillWeight = 15;
-            dgvCodigos.Columns["materia"].FillWeight = 24;
-            dgvCodigos.Columns["grupo"].FillWeight = 12;
-            dgvCodigos.Columns["laboratorio"].FillWeight = 20;
+            dgvCodigos.Columns["fecha"].DisplayIndex = 0;
+            dgvCodigos.Columns["codigo"].DisplayIndex = 1;
+            dgvCodigos.Columns["hora_entrada"].DisplayIndex = 2;
+            dgvCodigos.Columns["hora_salida"].DisplayIndex = 3;
+            dgvCodigos.Columns["laboratorio"].DisplayIndex = 4;
+            dgvCodigos.Columns["materia"].DisplayIndex = 5;
+            dgvCodigos.Columns["grupo"].DisplayIndex = 6;
+            dgvCodigos.Columns["alumnos"].DisplayIndex = 7;
+
+            dgvCodigos.Columns["fecha"].FillWeight = 14;
+            dgvCodigos.Columns["codigo"].FillWeight = 12;
+            dgvCodigos.Columns["hora_entrada"].FillWeight = 13;
+            dgvCodigos.Columns["hora_salida"].FillWeight = 13;
+            dgvCodigos.Columns["laboratorio"].FillWeight = 16;
+            dgvCodigos.Columns["materia"].FillWeight = 22;
+            dgvCodigos.Columns["grupo"].FillWeight = 10;
+            dgvCodigos.Columns["alumnos"].FillWeight = 10;
+
+            dgvCodigos.Columns["alumnos"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         }
 
         private void AplicarFiltros()
@@ -260,15 +282,16 @@ namespace DigBit
 
             if (chkFiltrarFecha.Checked)
             {
-                filtros.Add($"fecha_generacion LIKE '{dtpFecha.Value:yyyy-MM-dd}%'");
+                // fecha viene como texto yyyy-MM-dd desde la consulta.
+                filtros.Add($"fecha = '{dtpFecha.Value:yyyy-MM-dd}'");
             }
 
             string textoBusqueda = txtBusqueda.Text.Trim().Replace("'", "''");
             if (!string.IsNullOrWhiteSpace(textoBusqueda))
             {
                 filtros.Add(
+                    $"fecha LIKE '%{textoBusqueda}%' OR " +
                     $"codigo LIKE '%{textoBusqueda}%' OR " +
-                    $"fecha_generacion LIKE '%{textoBusqueda}%' OR " +
                     $"hora_entrada LIKE '%{textoBusqueda}%' OR " +
                     $"hora_salida LIKE '%{textoBusqueda}%' OR " +
                     $"materia LIKE '%{textoBusqueda}%' OR " +
@@ -287,37 +310,35 @@ namespace DigBit
 
         private void ActualizarContador()
         {
-            lblCantidad.Text = $"Registros encontrados: {dgvCodigos.Rows.Count}";
+            lblCantidad.Text = $"Sesiones encontradas: {dgvCodigos.Rows.Count}";
         }
 
         private void DescargarSeleccionado()
         {
-            if (dgvCodigos.CurrentRow == null || dgvCodigos.CurrentRow.Cells["codigo"]?.Value == null)
+            DataGridViewRow fila = dgvCodigos.CurrentRow;
+            object idSesionValor = fila?.Cells["idcodigos_accesos"]?.Value;
+            if (idSesionValor == null || idSesionValor == DBNull.Value)
             {
-                MessageBox.Show("Selecciona un codigo para descargar su PDF.", "Codigo requerido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Selecciona una sesion para descargar su PDF.", "Sesion requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            string codigo = dgvCodigos.CurrentRow.Cells["codigo"].Value.ToString();
-            if (string.IsNullOrWhiteSpace(codigo))
-            {
-                MessageBox.Show("Selecciona un codigo valido.", "Codigo requerido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            int idSesion = Convert.ToInt32(idSesionValor);
+            string codigo = fila.Cells["codigo"]?.Value?.ToString() ?? string.Empty;
 
-            DescargarPdfCodigo(codigo);
+            DescargarPdfSesion(idSesion, codigo);
         }
 
-        private void DescargarPdfCodigo(string codigoAcceso)
+        private void DescargarPdfSesion(int idSesion, string codigo)
         {
-            string nombreArchivo = DateTime.Now.ToString("dd-M-yyyy-HH_mm_ss") + "_" + nombreProfesor + ".pdf";
-            Usuario datos = consultas.ConsultarDatosPdf(codigoAcceso);
+            Usuario datos = consultas.ConsultarDatosPdfSesion(idSesion);
             if (datos == null)
             {
-                MessageBox.Show("No se encontraron datos para el codigo seleccionado.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("No se encontraron datos para la sesion seleccionada.", "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
+            string nombreArchivo = NombreArchivoSeguro(datos.HoraRegistro + "_" + codigo + "_" + nombreProfesor + ".pdf");
             string rutaCompleta = ObtenerRutaDestinoPdf(nombreArchivo);
             if (string.IsNullOrWhiteSpace(rutaCompleta))
             {
@@ -357,7 +378,7 @@ namespace DigBit
                     XMLWorkerHelper.GetInstance().ParseXHtml(writer, pdfDoc, sr);
                 }
 
-                DataTable detalles = consultas.consultaRegistro(codigoAcceso);
+                DataTable detalles = consultas.consultaRegistroSesion(idSesion);
                 AgregarTablaAlPDF(pdfDoc, detalles);
 
                 pdfDoc.Close();
@@ -365,6 +386,16 @@ namespace DigBit
 
             MessageBox.Show("El PDF se guardo correctamente en: " + rutaCompleta, "Informacion", MessageBoxButtons.OK, MessageBoxIcon.Information);
             AbrirVistaPreviaPdf(rutaCompleta);
+        }
+
+        private static string NombreArchivoSeguro(string nombre)
+        {
+            foreach (char invalido in Path.GetInvalidFileNameChars())
+            {
+                nombre = nombre.Replace(invalido, '_');
+            }
+
+            return nombre;
         }
 
         private string ObtenerRutaDestinoPdf(string nombreArchivo)
@@ -413,19 +444,49 @@ namespace DigBit
             pdfTable.AddCell(new PdfPCell(new Phrase("Numero de Computadora")) { BackgroundColor = BaseColor.LIGHT_GRAY, Padding = 4f });
             pdfTable.AddCell(new PdfPCell(new Phrase("Comentarios")) { BackgroundColor = BaseColor.LIGHT_GRAY, Padding = 4f });
 
+            // La fila que reporta algo va en naranja claro y la celda con la
+            // falla en naranja intenso, para localizarla de un vistazo.
+            BaseColor suave = new BaseColor(255, 240, 214);
+            BaseColor fuerte = new BaseColor(255, 176, 79);
+            bool hayFallas = false;
+
             int numeroFila = 1;
             foreach (DataRow row in detalles.Rows)
             {
-                pdfTable.AddCell(new PdfPCell(new Phrase(numeroFila.ToString())) { Padding = 4f });
-                pdfTable.AddCell(new PdfPCell(new Phrase(row["nombre_completo"].ToString())) { Padding = 4f });
-                pdfTable.AddCell(new PdfPCell(new Phrase(row["numero_computadora"].ToString())) { Padding = 4f });
+                bool conFalla = Consultas.ConFalla(row);
+                hayFallas |= conFalla;
+                BaseColor fondo = conFalla ? suave : null;
 
-                string comentarios = $"Red: {row["comentarios_red"]}, Hardware: {row["comentarios_hardware"]}, Software: {row["comentarios_software"]}";
-                pdfTable.AddCell(new PdfPCell(new Phrase(comentarios)) { Padding = 4f });
+                AgregarCelda(pdfTable, numeroFila.ToString(), fondo);
+                AgregarCelda(pdfTable, row["nombre_completo"].ToString(), fondo);
+                AgregarCelda(pdfTable, row["numero_computadora"].ToString(), fondo);
+                AgregarCelda(pdfTable, Consultas.DescribirFallas(row), conFalla ? fuerte : null, conFalla);
                 numeroFila++;
             }
 
             pdfDoc.Add(pdfTable);
+
+            if (hayFallas)
+            {
+                iTextSharp.text.Font fuenteNota = FontFactory.GetFont(FontFactory.HELVETICA_OBLIQUE, 8f);
+                Paragraph nota = new Paragraph("Celda naranja intensa: la falla o el comentario que reporto el alumno.", fuenteNota)
+                {
+                    SpacingBefore = 6f
+                };
+                pdfDoc.Add(nota);
+            }
+        }
+
+        private static void AgregarCelda(PdfPTable tabla, string texto, BaseColor fondo, bool negrita = false)
+        {
+            iTextSharp.text.Font fuente = negrita ? FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 10f) : null;
+            PdfPCell celda = new PdfPCell(new Phrase(texto, fuente)) { Padding = 4f };
+            if (fondo != null)
+            {
+                celda.BackgroundColor = fondo;
+            }
+
+            tabla.AddCell(celda);
         }
 
         private void btnAplicarFiltro_Click(object sender, EventArgs e)

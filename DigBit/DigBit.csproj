@@ -93,6 +93,30 @@
     <Reference Include="ZstdSharp, Version=0.7.5.0, Culture=neutral, PublicKeyToken=8d151af33a4ad5cf, processorArchitecture=MSIL">
       <HintPath>..\packages\ZstdSharp.Port.0.7.5\lib\net462\ZstdSharp.dll</HintPath>
     </Reference>
+    <!-- Estos seis estaban en packages.config pero SIN Reference aqui, asi que
+         nuget los restauraba y msbuild no los copiaba a bin\. No dieron guerra
+         porque casi ningun camino los toca, pero MySqlConnection.BeginTransaction
+         necesita System.Threading.Tasks.Extensions: el alta de alumnos (la unica
+         que usa transaccion) reventaba con FileNotFoundException. Sin Reference
+         tampoco sirven de nada las redirecciones de App.config. -->
+    <Reference Include="K4os.Hash.xxHash, Version=1.0.8.0, Culture=neutral, PublicKeyToken=32cd54395057cec3, processorArchitecture=MSIL">
+      <HintPath>..\packages\K4os.Hash.xxHash.1.0.8\lib\net462\K4os.Hash.xxHash.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.6.0.0\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Tasks.Extensions.4.5.4\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="actualizarLaboratorio.cs">
@@ -106,12 +130,6 @@
     </Compile>
     <Compile Include="Alumno_Principal.Designer.cs">
       <DependentUpon>Alumno_Principal.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Bitacora_profesor.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Bitacora_profesor.Designer.cs">
-      <DependentUpon>Bitacora_profesor.cs</DependentUpon>
     </Compile>
     <Compile Include="borrarlab.cs">
       <SubType>Form</SubType>
@@ -129,10 +147,47 @@
     <Compile Include="conexion\Codigo_Gemerador.cs" />
     <Compile Include="conexion\Conexion.cs" />
     <Compile Include="conexion\Consultas.cs" />
+    <Compile Include="conexion\Contrasenas.cs" />
     <Compile Include="conexion\InsercionDatos.cs" />
     <Compile Include="conexion\Datos_User.cs" />
     <Compile Include="conexion\OpcionCombo.cs" />
     <Compile Include="conexion\Usuario.cs" />
+    <Compile Include="conexion\VentanaCodigo.cs" />
+    <Compile Include="conexion\HorariosDatos.cs" />
+    <Compile Include="conexion\Consultas.Sesiones.cs" />
+    <Compile Include="Infraestructura\LaboratorioEquipo.cs" />
+    <Compile Include="Infraestructura\SinConexion.cs" />
+    <Compile Include="conexion\CacheHorario.cs" />
+    <Compile Include="conexion\ColaBitacoras.cs" />
+    <Compile Include="BitacoraMisClases.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="BitacoraSesion.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AdministrarHorarios.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="MisClasesProfesor.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Infraestructura\AppContexto.cs" />
+    <Compile Include="Infraestructura\CarpetaDatos.cs" />
+    <Compile Include="Infraestructura\Emergencia.cs" />
+    <Compile Include="DialogoEmergencia.cs" />
+    <Compile Include="Infraestructura\Kiosco.cs" />
+    <Compile Include="Infraestructura\Log.cs" />
+    <Compile Include="Infraestructura\SesionActiva.cs" />
+    <Compile Include="Infraestructura\SesionEquipo.cs" />
+    <Compile Include="AvisoSesion.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="PantallaError.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="RegistroExitoso.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="creargrupo.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -156,12 +211,6 @@
     </Compile>
     <Compile Include="EliminarUser.Designer.cs">
       <DependentUpon>EliminarUser.cs</DependentUpon>
-    </Compile>
-    <Compile Include="generarCodigo.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="generarCodigo.Designer.cs">
-      <DependentUpon>generarCodigo.cs</DependentUpon>
     </Compile>
     <Compile Include="GestionBitacorasAdministrador.cs">
       <SubType>Form</SubType>
@@ -195,12 +244,6 @@
     </Compile>
     <Compile Include="Login.designer.cs">
       <DependentUpon>Login.cs</DependentUpon>
-    </Compile>
-    <Compile Include="mostrar_Codigo_Profesor.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="mostrar_Codigo_Profesor.Designer.cs">
-      <DependentUpon>mostrar_Codigo_Profesor.cs</DependentUpon>
     </Compile>
     <Compile Include="pregunta_s.cs">
       <SubType>Form</SubType>
@@ -274,9 +317,6 @@
     <EmbeddedResource Include="Alumno_Principal.resx">
       <DependentUpon>Alumno_Principal.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="Bitacora_profesor.resx">
-      <DependentUpon>Bitacora_profesor.cs</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="borrarlab.resx">
       <DependentUpon>borrarlab.cs</DependentUpon>
     </EmbeddedResource>
@@ -295,9 +335,6 @@
     <EmbeddedResource Include="EliminarUser.resx">
       <DependentUpon>EliminarUser.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="generarCodigo.resx">
-      <DependentUpon>generarCodigo.cs</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="ingresar.resx">
       <DependentUpon>ingresar.cs</DependentUpon>
     </EmbeddedResource>
@@ -309,9 +346,6 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Login.resx">
       <DependentUpon>Login.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="mostrar_Codigo_Profesor.resx">
-      <DependentUpon>mostrar_Codigo_Profesor.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="pregunta_s.resx">
       <DependentUpon>pregunta_s.cs</DependentUpon>

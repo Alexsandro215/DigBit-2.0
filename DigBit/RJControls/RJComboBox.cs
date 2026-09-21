@@ -334,19 +334,17 @@ namespace DigBit.RJControls
             cmbList.DroppedDown = true;
         }
 
+        // Lo unico que tiene que hacer: reflejar en la etiqueta lo que el usuario
+        // eligio. Debajo habia pegado, por error, el cuerpo del constructor: en
+        // cuanto alguien elegia algo de la lista, cmbList se sustituia por un
+        // ComboBox nuevo y VACIO que ademas no se anadia a Controls. A partir de
+        // ese momento SelectedItem era null y SelectedIndex -1, asi que la
+        // bitacora perdia la falla elegida (y el codigo viejo tronaba al hacer
+        // SelectedItem.ToString()). Ese SuspendLayout tampoco tenia su
+        // ResumeLayout, de modo que el control se quedaba con el diseno congelado.
         private void ComboBox_TextChanged(object sender, EventArgs e)
         {
             lblText.Text = cmbList.Text;
-            cmbList = new ComboBox();
-            lblText = new Label();
-            btnIcon = new Button();
-            this.SuspendLayout();
-
-            //ComboBox: Dropdwon list
-            cmbList.BackColor = backColor;
-            cmbList.Font = new Font(this.Font.Name, 10F);
-            cmbList.ForeColor = listTextColor;
-            cmbList.SelectedIndexChanged += new EventHandler(ComboBox_SelectedIndexChanged); // Evento por defecto
         }
 
         private void ComboBox_SelectedIndexChanged(object sender, EventArgs e)
