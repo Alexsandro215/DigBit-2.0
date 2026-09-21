@@ -10,6 +10,7 @@ namespace DigBit.Instalador
 {
     internal sealed class FormInstalador : Form
     {
+        private readonly RadioButton rbServidor = new RadioButton();
         private readonly RadioButton rbMaquina = new RadioButton();
         private readonly RadioButton rbAdm = new RadioButton();
         private readonly RadioButton rbMaestro = new RadioButton();
@@ -33,7 +34,11 @@ namespace DigBit.Instalador
         private readonly TextBox txtSalida = new TextBox();
         private readonly Label lblEstado = new Label();
 
+        private readonly TextBox txtNuevaClaveEquipo = new TextBox();
+        private readonly TextBox txtNuevaClaveAdmin = new TextBox();
+
         private readonly List<Control> soloMaquina = new List<Control>();
+        private readonly List<Control> soloServidor = new List<Control>();
         private readonly string raiz;
 
         public FormInstalador()
@@ -50,6 +55,11 @@ namespace DigBit.Instalador
 
             int y = 16;
             Titulo("Que equipo estas preparando", ref y);
+
+            rbServidor.SetBounds(32, y, 700, 22);
+            rbServidor.Text = "Servidor de base de datos  -  PRIMERO, y una sola vez en todo el laboratorio";
+            rbServidor.CheckedChanged += (s, e) => AjustarModo();
+            Controls.Add(rbServidor); y += 26;
 
             rbMaquina.SetBounds(32, y, 700, 22);
             rbMaquina.Text = "Maquina de laboratorio  -  pantalla bloqueada, la usa el alumno";
@@ -73,6 +83,15 @@ namespace DigBit.Instalador
             Campo("Usuario", txtUsuarioBd, ref y, "digbit_equipo");
             Campo("Contrasena", txtClaveBd, ref y, "");
             txtClaveBd.UseSystemPasswordChar = true;
+            y += 8;
+
+            Titulo("Contrasenas que se van a CREAR (solo al preparar el servidor)", ref y);
+            Campo("Para los equipos (digbit_equipo)", txtNuevaClaveEquipo, ref y, "");
+            txtNuevaClaveEquipo.UseSystemPasswordChar = true;
+            soloServidor.Add(txtNuevaClaveEquipo);
+            Campo("Para el administrador (digbit_admin)", txtNuevaClaveAdmin, ref y, "");
+            txtNuevaClaveAdmin.UseSystemPasswordChar = true;
+            soloServidor.Add(txtNuevaClaveAdmin);
             y += 8;
 
             Titulo("Este equipo", ref y);
@@ -187,6 +206,7 @@ namespace DigBit.Instalador
         }
 
         private bool EsMaquina { get { return rbMaquina.Checked; } }
+        private bool EsServidor { get { return rbServidor.Checked; } }
 
         private void AjustarModo()
         {
@@ -194,6 +214,20 @@ namespace DigBit.Instalador
             {
                 c.Enabled = EsMaquina;
             }
+
+            foreach (Control c in soloServidor)
+            {
+                c.Enabled = EsServidor;
+            }
+
+            // Al preparar el servidor no hay a donde conectarse: la base se crea
+            // aqui mismo. Pedir usuario y contrasena en ese momento es lo que
+            // deja a cualquiera mirando la ventana sin saber que poner.
+            txtServidor.Enabled = !EsServidor;
+            txtBase.Enabled = !EsServidor;
+            txtUsuarioBd.Enabled = !EsServidor;
+            txtClaveBd.Enabled = !EsServidor;
+            btnInstalar.Text = EsServidor ? "Preparar la base" : "Instalar";
 
             // El equipo del administrador usa el usuario de MySQL que puede
             // administrar; los otros dos, el restringido.
@@ -270,6 +304,12 @@ namespace DigBit.Instalador
                 return;
             }
 
+            if (EsServidor)
+            {
+                PrepararServidor();
+                return;
+            }
+
             StringBuilder args = new StringBuilder();
             if (EsMaquina)
             {
@@ -300,6 +340,14 @@ namespace DigBit.Instalador
 
         private string Validar()
         {
+            if (EsServidor)
+            {
+                if (txtNuevaClaveEquipo.Text.Length == 0) { return "Pon una contrasena para digbit_equipo: es la que llevaran los equipos del laboratorio."; }
+                if (txtNuevaClaveAdmin.Text.Length == 0) { return "Pon una contrasena para digbit_admin: es la de este equipo."; }
+                if (txtNuevaClaveEquipo.Text == txtNuevaClaveAdmin.Text) { return "Pon contrasenas DISTINTAS. Si son la misma, quien lea la de un equipo del laboratorio tiene tambien la de administrador."; }
+                return null;
+            }
+
             if (txtServidor.Text.Trim().Length == 0) { return "Falta el servidor de la base de datos."; }
             if (txtBase.Text.Trim().Length == 0) { return "Falta el nombre de la base."; }
             if (txtUsuarioBd.Text.Trim().Length == 0) { return "Falta el usuario de la base."; }
@@ -308,6 +356,75 @@ namespace DigBit.Instalador
             if (txtCuenta.Text.Trim().Length == 0) { return "Falta el nombre de la cuenta del laboratorio."; }
             if (txtClaveCuenta.Text.Length == 0) { return "Falta la contrasena de la cuenta del laboratorio."; }
             return null;
+        }
+
+
+        /// <summary>
+        /// Monta la base en ESTE equipo y crea los dos usuarios. Es el primer
+        /// paso de todo el despliegue y se hace una sola vez; hasta que esto no
+        /// existe, no hay a donde conectar ningun otro equipo.
+        ///
+        /// Se genera un guion temporal en vez de encadenar comandos: las
+        /// contrasenas pasan por archivo y no por la linea de comandos, que la
+        /// ve cualquiera que liste los procesos.
+        /// </summary>
+        private void PrepararServidor()
+        {
+            string sqlUsuarios = Path.Combine(raiz, "db", "07_usuarios_minimos.sql");
+            if (!File.Exists(sqlUsuarios))
+            {
+                MessageBox.Show("No encuentro " + sqlUsuarios, "Preparar la base", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (MessageBox.Show(
+                    @"Se va a instalar MySQL en C:\DigBitDB como servicio, con el esquema y los datos de prueba," + Environment.NewLine +
+                    "y se crearan los usuarios digbit_equipo y digbit_admin." + Environment.NewLine + Environment.NewLine +
+                    "Esto se hace UNA SOLA VEZ, en el equipo que hara de servidor.",
+                    "Preparar la base", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            {
+                return;
+            }
+
+            string temporal = Path.Combine(Path.GetTempPath(), "digbit_preparar_" + Guid.NewGuid().ToString("N") + ".ps1");
+            StringBuilder guion = new StringBuilder();
+            guion.AppendLine("$ErrorActionPreference = 'Stop'");
+            guion.AppendLine("& " + Comilla(Path.Combine(raiz, "preparar_bd.ps1")) + @" -Destino 'C:\DigBitDB'");
+            guion.AppendLine("if ($LASTEXITCODE -ne 0) { throw 'preparar_bd.ps1 fallo.' }");
+            guion.AppendLine("Write-Host ''");
+            guion.AppendLine("Write-Host '== Usuarios de MySQL con permisos minimos' -ForegroundColor Cyan");
+            guion.AppendLine("$sql = Get-Content -Raw " + Comilla(sqlUsuarios));
+            guion.AppendLine("$sql = $sql.Replace('CAMBIAME-EQUIPO', " + Comilla(txtNuevaClaveEquipo.Text) + ")");
+            guion.AppendLine("$sql = $sql.Replace('CAMBIAME-ADMIN', " + Comilla(txtNuevaClaveAdmin.Text) + ")");
+            guion.AppendLine("$previo = $ErrorActionPreference; $ErrorActionPreference = 'Continue'");
+            guion.AppendLine(@"$sql | & 'C:\DigBitDB\bin\mysql.exe' -u root");
+            guion.AppendLine("$codigo = $LASTEXITCODE; $ErrorActionPreference = $previo");
+            guion.AppendLine("if ($codigo -ne 0) { throw \"mysql devolvio $codigo al crear los usuarios.\" }");
+            guion.AppendLine("Write-Host ''");
+            guion.AppendLine("Write-Host 'Base lista. Ahora elige Administrador arriba y usa:' -ForegroundColor Green");
+            guion.AppendLine("Write-Host '   Servidor 127.0.0.1   Base teschi_otru   Usuario digbit_admin'");
+            guion.AppendLine("Write-Host '   y la contrasena de administrador que acabas de poner.'");
+
+            File.WriteAllText(temporal, guion.ToString(), new UTF8Encoding(false));
+            try
+            {
+                Correr(temporal, "", "Preparar la base");
+            }
+            finally
+            {
+                try { File.Delete(temporal); } catch (Exception) { }
+            }
+
+            // Se dejan rellenos los datos del siguiente paso, para no tener que
+            // acordarse de nada.
+            txtServidor.Text = "127.0.0.1";
+            txtBase.Text = "teschi_otru";
+            txtClaveBd.Text = txtNuevaClaveAdmin.Text;
+        }
+
+        private static string Comilla(string valor)
+        {
+            return Guiones.Comillas(valor);
         }
 
         private void Correr(string guion, string argumentos, string que)

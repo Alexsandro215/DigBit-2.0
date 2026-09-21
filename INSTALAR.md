@@ -26,8 +26,18 @@ DigBit.Vigilante\bin\Release  El servicio que cierra la sesión a la hora
 ## La forma facil: el instalador
 
 En la raiz del paquete hay un **`DigBit.Instalador.exe`**. Haz doble clic: pide
-permiso de administrador, eliges que clase de equipo es, **el laboratorio lo
-escoges de una lista que saca de la base** y le das a Instalar.
+permiso de administrador y eliges que clase de equipo estas preparando.
+
+**Empieza por "Servidor de base de datos"**, que es la primera opcion. Sin eso
+no hay base a la que conectar nada, y el resto de casillas te pediran datos que
+todavia no existen. Solo te pide dos contrasenas: la de los equipos del
+laboratorio y la del administrador, que crea en ese momento. Se hace **una sola
+vez** en todo el despliegue.
+
+Con la base ya montada, vuelves a la misma ventana y eliges **Administrador**.
+Los datos de conexion te los deja rellenos. Despues, en cada maquina de
+laboratorio, **el laboratorio se escoge de una lista que saca de la base**: no
+se teclea, asi que no se puede escribir mal.
 
 Por debajo ejecuta exactamente los mismos guiones que se describen abajo, asi
 que lo que hace es identico. La ventaja es que no hay que teclear una linea
